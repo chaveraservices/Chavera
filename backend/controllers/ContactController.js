@@ -82,7 +82,7 @@ export default class ContactController {
     }
 
     async insert(req, res, next) {
-        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, category, notes } = req.body;
+        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, category, customer_grade, house_type, purchase_type, products, contact_date, notes } = req.body;
 
         // Trim required string fields before validation
         full_name = (full_name || '').trim();
@@ -103,7 +103,11 @@ export default class ContactController {
 
         const newContact = new Contact({
             honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark,
-            village_town, mandal, district, state, pincode, phone_1, phone_2, category, notes
+            village_town, mandal, district, state, pincode, phone_1, phone_2, category,
+            customer_grade, house_type, purchase_type,
+            products: Array.isArray(products) ? products : (products ? [products] : []),
+            contact_date: contact_date || null,
+            notes
         });
 
         await newContact.save();

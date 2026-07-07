@@ -99,6 +99,15 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+/* For pages that manage their own internal scroll (e.g. LocationsPage) */
+.main-content > .page-full-bleed {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -677,12 +686,6 @@ textarea.input-error-field {
 }
 
 /* ── Import Page Styles ──────────────────────── */
-.import-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 32px;
-}
 .import-card {
   background: var(--bg-white);
   border: 1px solid var(--border-color);
@@ -693,11 +696,6 @@ textarea.input-error-field {
   justify-content: center;
   align-items: center;
   text-align: center;
-  min-height: 280px;
-}
-.import-card.paste-card {
-  align-items: flex-start;
-  text-align: left;
 }
 .import-card-title {
   font-size: 1.1rem;
@@ -705,22 +703,8 @@ textarea.input-error-field {
   color: var(--text-dark);
   margin-bottom: 16px;
 }
-.paste-textarea {
-  width: 100%;
-  flex: 1;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 16px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  resize: none;
-  outline: none;
-  margin-bottom: 16px;
-}
-.paste-textarea:focus {
-  border-color: var(--primary-accent);
-}
 
+/* Table cell highlight states */
 .cell-invalid {
   background-color: #FEE2E2 !important;
   color: #DC2626 !important;
@@ -732,24 +716,26 @@ textarea.input-error-field {
   font-weight: 600;
 }
 .cell-missing {
-  background-color: #E2E8F0 !important;
+  background-color: #F1F5F9 !important;
   color: #64748B !important;
   font-weight: 600;
-  text-align: center;
 }
 
-.badge-valid { background-color: #E0E7FF; color: #4338CA; }
-.badge-invalid { background-color: #FEE2E2; color: #DC2626; }
-.badge-duplicate { background-color: #DBEAFE; color: #2563EB; }
-.badge-missing { background-color: #E2E8F0; color: #475569; }
+/* Status badges */
+.badge-valid    { background-color: #DCFCE7; color: #15803D; }
+.badge-invalid  { background-color: #FEE2E2; color: #DC2626; }
+.badge-duplicate{ background-color: #DBEAFE; color: #2563EB; }
+.badge-missing  { background-color: #F1F5F9; color: #475569; }
 
+/* Legend dots */
 .legend-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  margin-right: 6px;
+  margin-right: 5px;
 }
-.dot-invalid { background-color: #DC2626; }
+.dot-invalid   { background-color: #DC2626; }
 .dot-duplicate { background-color: #3B82F6; }
-.dot-missing { background-color: #94A3B8; }
+.dot-missing   { background-color: #94A3B8; }
+

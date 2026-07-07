@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import CustomSelect from './CustomSelect';
 import api from '../utils/api';
+import { PRODUCT_OPTIONS, CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES } from '../utils/contactFields';
 
 // ---------- validation rules ----------
 const RULES = {
@@ -79,6 +80,11 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     phone_1: contact?.phone_1 || '',
     phone_2: contact?.phone_2 || '',
     category: contact?.category || '',
+    customer_grade: contact?.customer_grade || '',
+    house_type: contact?.house_type || '',
+    purchase_type: contact?.purchase_type || '',
+    products: Array.isArray(contact?.products) ? contact.products : [],
+    contact_date: contact?.contact_date ? String(contact.contact_date).slice(0, 10) : '',
     notes: contact?.notes || ''
   });
 
@@ -153,6 +159,16 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     const { name } = e.target;
     handleChange(e);
     setTouched(prev => ({ ...prev, [name]: true }));
+  };
+
+  // Toggle a product in the multi-select list
+  const toggleProduct = (product) => {
+    setFormData(prev => ({
+      ...prev,
+      products: prev.products.includes(product)
+        ? prev.products.filter(p => p !== product)
+        : [...prev.products, product],
+    }));
   };
 
   // Field status for styling
@@ -555,6 +571,96 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               {!fieldErrors.pincode && !formData.pincode && (
                 <FieldHint>Optional — 6 digits</FieldHint>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* CLASSIFICATION & PRODUCTS */}
+        <div className="form-section">
+          <div className="form-section-title">CLASSIFICATION &amp; PRODUCTS</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Date</label>
+              <input
+                type="date"
+                name="contact_date"
+                value={formData.contact_date}
+                onChange={handleChange}
+                className="input-field"
+              />
+              <FieldHint>Optional — defaults to created date</FieldHint>
+            </div>
+
+            <div className="form-group">
+              <label>Type of Customer (Grade)</label>
+              <CustomSelect
+                name="customer_grade"
+                value={formData.customer_grade}
+                onChange={handleSelectChange}
+                options={[
+                  { label: 'None', value: '' },
+                  ...CUSTOMER_GRADES.map(g => ({ label: g, value: g })),
+                ]}
+                placeholder="Select grade"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Type of House</label>
+              <CustomSelect
+                name="house_type"
+                value={formData.house_type}
+                onChange={handleSelectChange}
+                options={[
+                  { label: 'None', value: '' },
+                  ...HOUSE_TYPES.map(h => ({ label: h, value: h })),
+                ]}
+                placeholder="Own / Rented"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Type of Purchase</label>
+              <CustomSelect
+                name="purchase_type"
+                value={formData.purchase_type}
+                onChange={handleSelectChange}
+                options={[
+                  { label: 'None', value: '' },
+                  ...PURCHASE_TYPES.map(p => ({ label: p, value: p })),
+                ]}
+                placeholder="Finance / Cash"
+              />
+            </div>
+
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <label>Products <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400 }}>(select all that apply)</span></label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+                {PRODUCT_OPTIONS.map(p => {
+                  const checked = formData.products.includes(p);
+                  return (
+                    <label
+                      key={p}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 12px', borderRadius: 999, cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        border: `1px solid ${checked ? 'var(--primary-accent)' : 'var(--border-color)'}`,
+                        background: checked ? 'var(--highlight)' : 'var(--bg-white)',
+                        color: checked ? 'var(--primary-accent)' : 'var(--text-dark)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleProduct(p)}
+                        style={{ accentColor: 'var(--primary-accent)' }}
+                      />
+                      {p}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

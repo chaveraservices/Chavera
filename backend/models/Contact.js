@@ -22,6 +22,12 @@ const contactSchema = new mongoose.Schema({
     phone_1: { type: String, required: true },
     phone_2: { type: String, default: null },
     category: { type: String, default: null },
+    // Client-requested classification fields
+    customer_grade: { type: String, default: null },   // Low Potential | Potential | High Potential
+    house_type: { type: String, default: null },       // Own | Rented
+    purchase_type: { type: String, default: null },    // Finance | Cash
+    products: { type: [String], default: [] },         // Cot, Mattresses, Sofa set, …
+    contact_date: { type: Date, default: null },       // manually entered date (createdAt is the auto date)
     notes: { type: String, default: null }
 }, {
     timestamps: true
@@ -31,6 +37,7 @@ const contactSchema = new mongoose.Schema({
 contactSchema.index({ full_name: 1 });
 contactSchema.index({ state: 1, district: 1, village_town: 1 });
 contactSchema.index({ category: 1 });
+contactSchema.index({ customer_grade: 1 });
 contactSchema.index({ phone_1: 1 });
 
 export default mongoose.model('Contact', contactSchema);
