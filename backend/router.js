@@ -26,6 +26,8 @@ router.post('/user/change-password', auth, h(userCtrl, 'changePassword'), respon
 
 // Location routes (public read, protected write)
 router.post('/location/list', h(locationCtrl, 'getAll'), responsedata);
+router.post('/location/states-districts', h(locationCtrl, 'getStatesDistricts'), responsedata);
+router.post('/location/cities', h(locationCtrl, 'getCities'), responsedata);
 router.post('/location/add-state', auth, h(locationCtrl, 'addState'), responsedata);
 router.post('/location/delete-state', auth, h(locationCtrl, 'deleteState'), responsedata);
 router.post('/location/add-district', auth, h(locationCtrl, 'addDistrict'), responsedata);
@@ -40,6 +42,7 @@ router.post('/contact/update', auth, h(contact, 'update'), responsedata);
 router.post('/contact/delete', auth, h(contact, 'delete'), responsedata);
 router.post('/contact/list', auth, h(contact, 'getAll'), responsedata);
 router.post('/contact/filter-options', auth, h(contact, 'getFilterOptions'), responsedata);
+router.post('/contact/town-suggestions', auth, h(contact, 'getTownSuggestions'), responsedata);
 router.post('/contact/get', auth, h(contact, 'getById'), responsedata);
 
 export default router;

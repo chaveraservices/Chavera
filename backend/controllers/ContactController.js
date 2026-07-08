@@ -69,6 +69,20 @@ export default class ContactController {
         next();
     }
 
+    // Distinct village/town values already entered — powers the town autocomplete
+    // so the app "learns" the small places a user actually works in.
+    async getTownSuggestions(req, res, next) {
+        const { state, district } = req.body || {};
+        const query = { village_town: { $nin: [null, ''] } };
+        if (state) query.state = String(state);
+        if (district) query.district = String(district);
+
+        const towns = await Contact.distinct('village_town', query);
+        res.locals.data = towns.filter(Boolean).sort((a, b) => a.localeCompare(b));
+        res.locals.message = 'Town suggestions fetched successfully';
+        next();
+    }
+
     async getById(req, res, next) {
         const { id } = req.body;
         if (!id) throw new ApiError(400, 'Contact ID is required');

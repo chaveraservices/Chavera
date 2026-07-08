@@ -1,7 +1,7 @@
 import { useState, Suspense, lazy } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { Users, Upload, Settings, LogOut, MapPin, Building2 } from 'lucide-react';
+import { Users, Upload, Settings, LogOut } from 'lucide-react';
 
 // Lazy loaded pages
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
@@ -38,8 +38,6 @@ function App() {
   const navItems = [
     { path: '/',         icon: <Users size={18} />,   label: 'Directory'  },
     { path: '/import',   icon: <Upload size={18} />,   label: 'Import'     },
-    { path: '/locations',icon: <MapPin size={18} />,   label: 'States & Districts' },
-    { path: '/cities',   icon: <Building2 size={18} />,label: 'Cities'     },
     { path: '/settings', icon: <Settings size={18} />, label: 'Settings'   },
   ];
 

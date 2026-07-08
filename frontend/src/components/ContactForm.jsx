@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import CustomSelect from './CustomSelect';
+import ComboBox from './ComboBox';
 import api from '../utils/api';
 import { PRODUCT_OPTIONS, CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES } from '../utils/contactFields';
 
@@ -96,20 +97,39 @@ export default function ContactForm({ contact, onCancel, onSave }) {
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Locations
-  const [locations, setLocations] = useState([]);
+  // Locations — states + district NAMES only (cities are lazy-loaded per district
+  // so the form never ships the full 150k-city dataset).
+  const [locations, setLocations] = useState([]); // [{ state, districts: [name] }]
   const [locLoading, setLocLoading] = useState(true);
+  const [districtCities, setDistrictCities] = useState([]); // cities for the chosen district
+  // Towns already entered in other contacts — feeds the village/town autocomplete
+  // so the app "learns" the small places the user actually works in.
+  const [townSuggestions, setTownSuggestions] = useState([]);
 
   useEffect(() => {
-    api.post('/location/list')
+    api.post('/location/states-districts')
       .then(res => { if (res.data.success) setLocations(res.data.data); })
       .catch(() => {})
       .finally(() => setLocLoading(false));
   }, []);
 
-  // Cascading lists
+  // Lazy-load the chosen district's cities + the user's previously-entered towns
+  // (both scoped to state/district so suggestions stay relevant).
+  useEffect(() => {
+    if (!formData.state || !formData.district) { setDistrictCities([]); setTownSuggestions([]); return; }
+    api.post('/location/cities', { state: formData.state, district: formData.district })
+      .then(res => { if (res.data.success) setDistrictCities(res.data.data || []); })
+      .catch(() => setDistrictCities([]));
+    api.post('/contact/town-suggestions', { state: formData.state, district: formData.district })
+      .then(res => { if (res.data.success) setTownSuggestions(res.data.data || []); })
+      .catch(() => {});
+  }, [formData.state, formData.district]);
+
+  // Cascading lists (districts are plain name strings now)
   const availableDistricts = locations.find(l => l.state === formData.state)?.districts || [];
-  const availableCities = availableDistricts.find(d => d.name === formData.district)?.cities || [];
+  // Combined suggestions: seeded cities for the district + towns the user has entered before.
+  const townOptions = [...new Set([...districtCities, ...townSuggestions].filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
 
   // Re-validate phone_2 whenever phone_1 changes (uniqueness check)
   useEffect(() => {
@@ -497,7 +517,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
                   onChange={handleSelectChange}
                   options={[
                     { label: 'Select District', value: '' },
-                    ...availableDistricts.map(d => ({ label: d.name, value: d.name }))
+                    ...availableDistricts.map(d => ({ label: d, value: d }))
                   ]}
                   placeholder="Select District"
                 />
@@ -516,41 +536,20 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               </label>
               {locLoading ? (
                 <input className="input-field" disabled placeholder="Loading…" />
-              ) : !formData.district ? (
-                <input
-                  name="village_town"
-                  value={formData.village_town}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={`input-field ${fieldState('village_town') === 'error' ? 'input-error-field' : ''}`}
-                  placeholder="Enter village or town"
-                  style={inputStyle('village_town')}
-                />
-              ) : availableCities.length === 0 ? (
-                <input
-                  name="village_town"
-                  value={formData.village_town}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={`input-field ${fieldState('village_town') === 'error' ? 'input-error-field' : ''}`}
-                  placeholder="Type village or town"
-                  style={inputStyle('village_town')}
-                />
               ) : (
-                <CustomSelect
+                <ComboBox
                   name="village_town"
                   value={formData.village_town}
-                  onChange={handleSelectChange}
-                  options={[
-                    { label: 'Select Village/Town', value: '' },
-                    ...availableCities.map(c => ({ label: c, value: c }))
-                  ]}
-                  placeholder="Select Village/Town"
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  options={townOptions}
+                  placeholder="Type any village / town…"
+                  required
+                  inputClassName={`input-field ${fieldState('village_town') === 'error' ? 'input-error-field' : ''}`}
+                  style={inputStyle('village_town')}
                 />
               )}
-              {formData.district && availableCities.length === 0 && (
-                <FieldHint>No cities configured — type manually</FieldHint>
-              )}
+              <FieldHint>Type any village/town — matching suggestions appear as you type</FieldHint>
               <FieldError name="village_town" />
             </div>
 

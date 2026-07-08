@@ -558,6 +558,29 @@ body {
   text-align: center;
 }
 
+/* Search box inside a searchable dropdown (States/Districts) */
+.custom-select-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-white);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+.custom-select-search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--text-dark);
+}
+
 /* Reusable card / chip patterns (extracted from repeated inline styles) */
 
 /* State card on the Locations page */

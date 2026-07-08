@@ -11,6 +11,35 @@ export default class LocationController {
         next();
     }
 
+    // Lightweight: states + district names only (NO cities). Keeps the form's
+    // initial payload tiny even with 150k+ cities in the DB.
+    async getStatesDistricts(req, res, next) {
+        const locations = await Location.find({}, { state: 1, 'districts.name': 1 }).sort({ state: 1 });
+        res.locals.data = locations.map(l => ({
+            state: l.state,
+            districts: (l.districts || []).map(d => d.name),
+        }));
+        res.locals.message = 'States and districts fetched successfully';
+        next();
+    }
+
+    // Cities for a single state+district (lazy-loaded when a district is chosen).
+    async getCities(req, res, next) {
+        const { state, district } = req.body || {};
+        if (!state || !district) {
+            throw new ApiError(400, 'State and district are required');
+        }
+        const result = await Location.aggregate([
+            { $match: { state: String(state) } },
+            { $unwind: '$districts' },
+            { $match: { 'districts.name': String(district) } },
+            { $project: { _id: 0, cities: '$districts.cities' } },
+        ]);
+        res.locals.data = (result[0] && result[0].cities) || [];
+        res.locals.message = 'Cities fetched successfully';
+        next();
+    }
+
     async addState(req, res, next) {
         const { state } = req.body;
         if (typeof state !== 'string' || !state.trim()) {
