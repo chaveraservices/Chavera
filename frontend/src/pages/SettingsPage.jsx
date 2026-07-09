@@ -23,10 +23,34 @@ export default function SettingsPage() {
   const [prefs, setPrefs] = useState({ defaultCategory: '' });
   const [prefSaved, setPrefSaved] = useState(false);
 
+  const [dbStats, setDbStats] = useState(null);
+  const [dbStatsLoading, setDbStatsLoading] = useState(false);
+  const [dbStatsError, setDbStatsError] = useState('');
+
   useEffect(() => {
     const savedPrefs = localStorage.getItem('chavera_prefs');
     if (savedPrefs) { try { setPrefs(JSON.parse(savedPrefs)); } catch { /* ignore */ } }
+    fetchDbStats();
   }, []);
+
+  const fetchDbStats = async () => {
+    setDbStatsLoading(true);
+    setDbStatsError('');
+    try {
+      const res = await api.post('/admin/db-stats');
+      setDbStats(res.data.data);
+    } catch (err) {
+      setDbStatsError(err.response?.data?.message || 'Failed to load DB stats');
+    } finally {
+      setDbStatsLoading(false);
+    }
+  };
+
+  const formatMB = (bytes) => {
+    if (!bytes) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    return mb > 1024 ? (mb / 1024).toFixed(2) + ' GB' : mb.toFixed(2) + ' MB';
+  };
 
   const handlePwChange = e => setPwData({ ...pwData, [e.target.name]: e.target.value });
 
@@ -52,12 +76,15 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="page-container" style={{ paddingTop: 32, maxWidth: 720 }}>
+    <div className="page-container" style={{ paddingTop: 32, maxWidth: 1200 }}>
       <div className="form-header-flex">
         <h1>Settings</h1>
       </div>
 
-      {/* Profile */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
+        
+        {/* Left Column */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
       <Section title="PROFILE">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
           <div style={{
@@ -138,27 +165,94 @@ export default function SettingsPage() {
           {prefSaved ? 'Saved!' : 'Save Preferences'}
         </button>
       </Section>
+      </div>
 
-      {/* About */}
-      <Section title="ABOUT">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          {[
-            ['Application', 'Chavera Contact Directory'],
-            ['Version', '1.0.0'],
-            ['Database', <span key="db" style={{ color: '#059669', fontWeight: 600 }}>● MongoDB Connected</span>],
-            ['Stack', 'React + Express + MongoDB'],
-          ].map(([label, val], i, arr) => (
-            <div key={label} style={{
-              display: 'flex', justifyContent: 'space-between',
-              padding: '12px 0',
-              borderBottom: i < arr.length - 1 ? '1px solid var(--border-color)' : 'none'
-            }}>
-              <span>{label}</span>
-              <span style={{ color: 'var(--text-dark)', fontWeight: 600 }}>{val}</span>
-            </div>
-          ))}
+      {/* Right Column */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+
+      {/* Database Monitoring */}
+      <Section title="DATABASE STORAGE MONITORING">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Real-time MongoDB storage metrics</span>
+          <button className="btn" onClick={fetchDbStats} disabled={dbStatsLoading} style={{ padding: '6px 12px', fontSize: '0.85rem', border: '1px solid var(--border-color)', background: 'white' }}>
+            {dbStatsLoading ? 'Refreshing...' : 'Refresh Stats'}
+          </button>
         </div>
+        
+        {dbStatsError && <div style={{ padding: '10px 14px', background: '#FEE2E2', color: '#DC2626', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{dbStatsError}</div>}
+        
+        {dbStats && (() => {
+          const maxBytes = 512 * 1024 * 1024;
+          const usedBytes = dbStats.storageSize !== undefined ? (dbStats.storageSize + (dbStats.indexSize || 0)) : 0;
+          const usedPercent = Math.min(100, (usedBytes / maxBytes) * 100);
+          const getProgressColor = (percent) => {
+            if (percent > 90) return 'linear-gradient(90deg, #ef4444, #f87171)';
+            if (percent > 75) return 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+            return 'linear-gradient(90deg, #10b981, #34d399)';
+          };
+
+          return (
+            <>
+              <div className="form-grid">
+                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Database Name</label>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.dbName}</div>
+                </div>
+                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Total Collections</label>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.collections}</div>
+                </div>
+                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Total Documents</label>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.objects}</div>
+                </div>
+                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Data Size</label>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.dataSize)}</div>
+                </div>
+                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Storage Size</label>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.storageSize)}</div>
+                </div>
+                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Index Size</label>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.indexSize)}</div>
+                </div>
+              </div>
+
+              {dbStats.storageSize !== undefined && (
+                <div style={{ marginTop: 16, padding: '20px 24px', background: 'white', borderRadius: 12, border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>Atlas Free Tier Usage</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(usedBytes)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ 512 MB</span></span>
+                  </div>
+                  
+                  <div style={{ width: '100%', height: 12, background: '#F1F5F9', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+                    <div style={{ 
+                      position: 'absolute',
+                      top: 0, left: 0, bottom: 0,
+                      width: `${usedPercent}%`, 
+                      background: getProgressColor(usedPercent),
+                      borderRadius: 6,
+                      transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+                    }} />
+                  </div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontSize: '0.9rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{usedPercent.toFixed(2)}% Used</span>
+                    <span style={{ color: '#059669', fontWeight: 600 }}>{formatMB(maxBytes - usedBytes)} Available</span>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </Section>
+
+
+      </div>
+
+      </div>
     </div>
   );
 }

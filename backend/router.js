@@ -3,6 +3,7 @@ import contactController from './controllers/ContactController.js';
 import AuthController from './controllers/AuthController.js';
 import LocationController from './controllers/LocationController.js';
 import UserController from './controllers/UserController.js';
+import AdminController from './controllers/AdminController.js';
 import { responsedata } from './methods.js';
 import { auth } from './middleware/auth.js';
 import { asyncHandler } from './middleware/asyncHandler.js';
@@ -13,6 +14,7 @@ const contact = new contactController();
 const authCtrl = new AuthController();
 const locationCtrl = new LocationController();
 const userCtrl = new UserController();
+const adminCtrl = new AdminController();
 
 // Bind a controller method and wrap it so async errors reach the error handler.
 const h = (instance, method) => asyncHandler(instance[method].bind(instance));
@@ -23,6 +25,9 @@ router.post('/register', authLimiter, h(authCtrl, 'register'), responsedata);
 
 // User routes (protected)
 router.post('/user/change-password', auth, h(userCtrl, 'changePassword'), responsedata);
+
+// Admin routes (protected)
+router.post('/admin/db-stats', auth, h(adminCtrl, 'getDbStats'), responsedata);
 
 // Location routes (public read, protected write)
 router.post('/location/list', h(locationCtrl, 'getAll'), responsedata);
