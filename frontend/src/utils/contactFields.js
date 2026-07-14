@@ -17,6 +17,8 @@ export const PRODUCT_OPTIONS = [
 export const CUSTOMER_GRADES = ['Low Potential', 'Potential', 'High Potential'];
 export const HOUSE_TYPES = ['Own', 'Rented'];
 export const PURCHASE_TYPES = ['Finance', 'Cash'];
+export const CATEGORY_OPTIONS = ['DEALER', 'CUSTOMER'];
+export const RELATION_OPTIONS = ['S/O', 'D/O', 'W/O', 'H/O'];
 
 // Import mapping — one entry per DB field.
 export const contactFields = [

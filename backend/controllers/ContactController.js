@@ -10,13 +10,18 @@ export default class ContactController {
     // Paginated + filtered list.
     // Body: { page, pageSize, search, state, district, city, category, all }
     async getAll(req, res, next) {
-        const { search, state, district, city, category, all } = req.body || {};
+        const { search, state, district, city, category, relation, customer_grade, house_type, purchase_type, product, all } = req.body || {};
 
         const query = {};
         if (state) query.state = String(state);
         if (district) query.district = String(district);
         if (city) query.village_town = String(city);
         if (category) query.category = String(category);
+        if (relation) query.relation = String(relation);
+        if (customer_grade) query.customer_grade = String(customer_grade);
+        if (house_type) query.house_type = String(house_type);
+        if (purchase_type) query.purchase_type = String(purchase_type);
+        if (product) query.products = String(product); // array field: matches contacts whose products include this
 
         if (search && typeof search === 'string' && search.trim()) {
             const re = new RegExp(escapeRegex(search.trim()), 'i');
@@ -54,17 +59,32 @@ export default class ContactController {
         next();
     }
 
-    // Distinct values for the filter dropdowns (state/district/city tuples + categories).
+    // Distinct values for every filter dropdown.
     async getFilterOptions(req, res, next) {
-        const [tuples, categories] = await Promise.all([
+        const nonEmpty = (field) => Contact.distinct(field, { [field]: { $nin: [null, ''] } });
+        const [tuples, categories, relations, grades, houseTypes, purchaseTypes, products] = await Promise.all([
             Contact.aggregate([
                 { $group: { _id: { state: '$state', district: '$district', city: '$village_town' } } },
                 { $project: { _id: 0, state: '$_id.state', district: '$_id.district', city: '$_id.city' } },
             ]),
-            Contact.distinct('category', { category: { $nin: [null, ''] } }),
+            nonEmpty('category'),
+            nonEmpty('relation'),
+            nonEmpty('customer_grade'),
+            nonEmpty('house_type'),
+            nonEmpty('purchase_type'),
+            Contact.distinct('products', { products: { $nin: [null, ''] } }),
         ]);
 
-        res.locals.data = { tuples, categories: categories.sort() };
+        const sorted = (a) => a.filter(Boolean).sort((x, y) => x.localeCompare(y));
+        res.locals.data = {
+            tuples,
+            categories: sorted(categories),
+            relations: sorted(relations),
+            grades: sorted(grades),
+            houseTypes: sorted(houseTypes),
+            purchaseTypes: sorted(purchaseTypes),
+            products: sorted(products),
+        };
         res.locals.message = 'Filter options fetched successfully';
         next();
     }

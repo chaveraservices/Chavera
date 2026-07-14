@@ -51,7 +51,7 @@ function App() {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-header">
-          <h2>Contact Directory</h2>
+          <img src="/chavera-logo.png" alt="Chavera" className="sidebar-logo" />
           <p>Enterprise Management</p>
         </div>
 

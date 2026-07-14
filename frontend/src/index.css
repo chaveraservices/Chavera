@@ -62,6 +62,13 @@ body {
   font-weight: 700;
   margin-bottom: 4px;
 }
+.sidebar-logo {
+  height: 52px;
+  width: auto;
+  max-width: 100%;
+  display: block;
+  margin-bottom: 8px;
+}
 .sidebar-header p {
   color: var(--text-muted);
   font-size: 0.75rem;
@@ -216,8 +223,10 @@ body {
   background: var(--bg-white);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  overflow: hidden;
+  /* scroll sideways when many columns are shown */
+  overflow-x: auto;
 }
+.data-table th, .data-table td { white-space: nowrap; }
 
 .data-table {
   width: 100%;
@@ -668,6 +677,183 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Filter panel (opened by the Filters button) */
+.filter-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px 18px;
+  margin-top: 16px;
+  padding: 20px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.filter-field label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.filter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 4px;
+  background: var(--primary-accent);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* Column manager panel */
+.columns-panel {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  max-width: 380px;
+}
+/* Column-manager button in the table header */
+.col-mgr-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-white);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.col-mgr-btn:hover { border-color: var(--primary-accent); color: var(--primary-accent); }
+/* Popover variant of the column panel, anchored under the header button */
+.columns-panel-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 70;
+  margin-top: 0;
+  width: 290px;
+  max-width: none;
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: normal;
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.25);
+}
+.columns-panel-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.col-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text-dark);
+  background: var(--bg-white);
+}
+.col-manage-row:hover { background: #F8FAFC; }
+.col-grip {
+  display: flex;
+  align-items: center;
+  color: #94A3B8;
+  cursor: grab;
+}
+.col-grip:active { cursor: grabbing; }
+
+/* Toggle switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  background: #CBD5E1;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+.switch-slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.switch input:checked + .switch-slider { background: var(--primary-accent); }
+.switch input:checked + .switch-slider::before { transform: translateX(16px); }
+
+/* Per-column header filter dropdown */
+.col-filter-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 60;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: 8px;
+  width: 220px;
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.col-filter-opt {
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.col-filter-opt:hover { background: #F1F5F9; }
+.col-filter-opt.selected { background: var(--highlight); color: var(--primary-accent); font-weight: 600; }
+.col-filter-clear {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  border: none;
+  background: none;
+  color: var(--danger);
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.col-filter-clear:hover { text-decoration: underline; }
 
 /* Bare icon button that turns danger-red on hover */
 .icon-delete-btn {

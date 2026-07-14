@@ -278,12 +278,6 @@ export default function ContactForm({ contact, onCancel, onSave }) {
       <form onSubmit={handleSubmit} noValidate>
         <div className="form-header-flex">
           <h1>{contact ? 'Edit Contact' : 'Add Contact'}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Saving...' : 'Save Contact'}
-            </button>
-          </div>
         </div>
 
         {serverError && (
@@ -744,6 +738,14 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               <FieldError name="notes" />
             </div>
           </div>
+        </div>
+
+        {/* Bottom action bar — so users don't scroll back up to save */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 8, marginBottom: 8 }}>
+          <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Saving...' : 'Save Contact'}
+          </button>
         </div>
       </form>
     </div>

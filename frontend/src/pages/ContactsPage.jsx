@@ -3,23 +3,38 @@ import * as XLSX from 'xlsx';
 import api from '../utils/api';
 import useDebounce from '../utils/useDebounce';
 import { contactsToExportRows } from '../utils/contactFields';
-import { Search, Bell, User as UserIcon, Download, Trash2, X, Printer } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, User as UserIcon, Download, Trash2, X, Tags, SlidersHorizontal } from 'lucide-react';
+import ColumnManager from '../components/ColumnManager';
 import CustomSelect from '../components/CustomSelect';
+import ColumnFilter from '../components/ColumnFilter';
 import AlertModal from '../components/AlertModal';
+import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, PRODUCT_OPTIONS, CATEGORY_OPTIONS, RELATION_OPTIONS } from '../utils/contactFields';
+
+// Master column order + which are hidden by default. Users can reorder/toggle
+// these; ACTIONS is always pinned last and can't be hidden.
+const DEFAULT_COLUMN_ORDER = ['name', 'relation', 'location', 'phone', 'type', 'grade', 'house', 'purchase', 'products', 'age', 'business', 'insta', 'state', 'district', 'city', 'pincode', 'date', 'phone2'];
+const DEFAULT_HIDDEN = ['grade', 'house', 'purchase', 'products', 'age', 'business', 'insta', 'state', 'district', 'city', 'pincode', 'date', 'phone2'];
 
 export default function ContactsPage({ onAdd, onEdit }) {
+  const navigate = useNavigate();
   const [contacts, setContacts] = useState([]); // current page only
   const [total, setTotal] = useState(0);        // matching count (server)
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
   const [contactToDelete, setContactToDelete] = useState(null);
   const [exporting, setExporting] = useState(false);
-  const [printing, setPrinting] = useState(false);
+  const [printingLabels, setPrintingLabels] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, message: '', type: 'error' });
 
   // Filter options (distinct values from the server)
   const [tuples, setTuples] = useState([]);        // [{state, district, city}]
   const [categories, setCategories] = useState([]);
+  const [relations, setRelations] = useState([]);
+  const [grades, setGrades] = useState([]);
+  const [houseTypes, setHouseTypes] = useState([]);
+  const [purchaseTypes, setPurchaseTypes] = useState([]);
+  const [products, setProducts] = useState([]);
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,6 +43,50 @@ export default function ContactsPage({ onAdd, onEdit }) {
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedRelation, setSelectedRelation] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedHouseType, setSelectedHouseType] = useState('');
+  const [selectedPurchaseType, setSelectedPurchaseType] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+
+  // Column visibility + order (persisted). Reconciled against the known columns
+  // so stale localStorage never breaks the table.
+  const [columnOrder, setColumnOrder] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('chavera_col_order'));
+      if (Array.isArray(s)) {
+        const valid = s.filter(k => DEFAULT_COLUMN_ORDER.includes(k));
+        return [...valid, ...DEFAULT_COLUMN_ORDER.filter(k => !valid.includes(k))];
+      }
+    } catch { /* ignore */ }
+    return DEFAULT_COLUMN_ORDER;
+  });
+  const [hiddenCols, setHiddenCols] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('chavera_col_hidden'));
+      if (Array.isArray(s)) return s.filter(k => DEFAULT_COLUMN_ORDER.includes(k));
+    } catch { /* ignore */ }
+    return DEFAULT_HIDDEN;
+  });
+  useEffect(() => { localStorage.setItem('chavera_col_order', JSON.stringify(columnOrder)); }, [columnOrder]);
+  useEffect(() => { localStorage.setItem('chavera_col_hidden', JSON.stringify(hiddenCols)); }, [hiddenCols]);
+
+  // Move the dragged column to the target column's position.
+  const reorderColumns = (dragKey, targetKey) => {
+    setColumnOrder(prev => {
+      const next = [...prev];
+      const from = next.indexOf(dragKey);
+      const to = next.indexOf(targetKey);
+      if (from < 0 || to < 0) return prev;
+      next.splice(from, 1);
+      next.splice(to, 0, dragKey);
+      return next;
+    });
+  };
+  const toggleColumn = (key) => {
+    setHiddenCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -42,15 +101,27 @@ export default function ContactsPage({ onAdd, onEdit }) {
     district: selectedDistrict,
     city: selectedCity,
     category: selectedCategory,
-  }), [debouncedSearch, selectedState, selectedDistrict, selectedCity, selectedCategory]);
+    relation: selectedRelation,
+    customer_grade: selectedGrade,
+    house_type: selectedHouseType,
+    purchase_type: selectedPurchaseType,
+    product: selectedProduct,
+  }), [debouncedSearch, selectedState, selectedDistrict, selectedCity, selectedCategory,
+    selectedRelation, selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct]);
 
   // Load distinct filter options once (and after mutations).
   useEffect(() => {
     api.post('/contact/filter-options')
       .then(res => {
         if (res.data.success) {
-          setTuples(res.data.data.tuples || []);
-          setCategories(res.data.data.categories || []);
+          const d = res.data.data;
+          setTuples(d.tuples || []);
+          setCategories(d.categories || []);
+          setRelations(d.relations || []);
+          setGrades(d.grades || []);
+          setHouseTypes(d.houseTypes || []);
+          setPurchaseTypes(d.purchaseTypes || []);
+          setProducts(d.products || []);
         }
       })
       .catch(err => console.error(err));
@@ -94,15 +165,21 @@ export default function ContactsPage({ onAdd, onEdit }) {
     [tuples, selectedState, selectedDistrict]
   );
 
+  // Fixed-vocabulary filters always offer their standard options (merged with any
+  // extra values already present in the data), so they work even before data exists.
+  const mergeOpts = (fixed, fromData) => [...new Set([...fixed, ...fromData])];
+  const gradeOptions = mergeOpts(CUSTOMER_GRADES, grades);
+  const houseOptions = mergeOpts(HOUSE_TYPES, houseTypes);
+  const purchaseOptions = mergeOpts(PURCHASE_TYPES, purchaseTypes);
+  const productOptions = mergeOpts(PRODUCT_OPTIONS, products);
+  const relationOptions = mergeOpts(RELATION_OPTIONS, relations);
+  const categoryOptions = mergeOpts(CATEGORY_OPTIONS, categories);
+
   // Pagination math (driven by server total)
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, total);
-
-  const handleDeleteClick = (contact) => {
-    setContactToDelete(contact);
-  };
 
   const confirmDelete = async () => {
     if (!contactToDelete) return;
@@ -122,75 +199,60 @@ export default function ContactsPage({ onAdd, onEdit }) {
     }
   };
 
-  const handlePrint = async () => {
-    setPrinting(true);
+  // Print the filtered contacts as 50mm x 30mm mailing labels (Name + address + phone).
+  const handleLabels = async () => {
+    setPrintingLabels(true);
     try {
-      // Pull the full matching set (ignores pagination) for the print.
       const res = await api.post('/contact/list', { all: true, ...filterParams });
       const source = res.data?.data?.items || [];
-      if (source.length === 0) { 
-        setAlertConfig({ isOpen: true, message: 'No contacts to print', type: 'error' });
-        return; 
+      if (source.length === 0) {
+        setAlertConfig({ isOpen: true, message: 'No contacts to print labels for', type: 'error' });
+        return;
       }
 
-      // Create an iframe to print
+      const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const labels = source.map(c => {
+        const name = (c.honorific ? c.honorific + ' ' : '') + (c.full_name || '');
+        const address = [c.door_flat_no, c.street, c.village_town, c.district, c.state, c.pincode].filter(Boolean).join(', ');
+        const phone = [c.phone_1, c.phone_2].filter(Boolean).join(' / ');
+        return `<div class="label">
+          <div class="lname">${esc(name)}</div>
+          <div class="laddr">${esc(address)}</div>
+          <div class="lphone">${esc(phone)}</div>
+        </div>`;
+      }).join('');
+
+      const html = `<html><head><title>Mailing Labels</title><style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, Helvetica, sans-serif; }
+        .sheet { display: flex; flex-wrap: wrap; }
+        .label {
+          width: 50mm; height: 30mm; padding: 2mm 3mm; overflow: hidden;
+          border: 0.2mm solid #e5e5e5;
+          display: flex; flex-direction: column; justify-content: center;
+        }
+        .lname { font-weight: bold; font-size: 9pt; line-height: 1.15; }
+        .laddr { font-size: 7.5pt; line-height: 1.2; margin-top: 1mm; }
+        .lphone { font-size: 7.5pt; margin-top: 1mm; }
+        @page { margin: 5mm; }
+        @media print { .label { break-inside: avoid; } }
+      </style></head><body><div class="sheet">${labels}</div></body></html>`;
+
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none';
       document.body.appendChild(iframe);
-
-      const htmlContent = `
-        <html>
-          <head>
-            <title>Print Contacts</title>
-            <style>
-              body { font-family: sans-serif; padding: 20px; color: #333; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-              th { background-color: #f8fafc; font-weight: 600; }
-              h1 { text-align: center; color: #1a365d; }
-              @media print {
-                @page { margin: 20px; }
-              }
-            </style>
-          </head>
-          <body>
-            <h1>Contact Directory</h1>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Address</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${source.map(contact => {
-                  const name = contact.full_name + (contact.business_name ? " (" + contact.business_name + ")" : "");
-                  const address = [contact.door_flat_no, contact.street, contact.village_town, contact.district, contact.state, contact.pincode].filter(Boolean).join(', ');
-                  return "<tr><td>" + name + "</td><td>" + address + "</td></tr>";
-                }).join('')}
-              </tbody>
-            </table>
-          </body>
-        </html>
-      `;
-
       iframe.contentDocument.open();
-      iframe.contentDocument.write(htmlContent);
+      iframe.contentDocument.write(html);
       iframe.contentDocument.close();
-
-      // Wait for iframe content to render before printing
       setTimeout(() => {
         iframe.contentWindow.focus();
         iframe.contentWindow.print();
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-        }, 1000);
-      }, 500);
-
+        setTimeout(() => document.body.removeChild(iframe), 1000);
+      }, 400);
     } catch (err) {
-      setAlertConfig({ isOpen: true, message: err.response?.data?.message || 'Failed to prepare print', type: 'error' });
+      setAlertConfig({ isOpen: true, message: err.response?.data?.message || 'Failed to prepare labels', type: 'error' });
     } finally {
-      setPrinting(false);
+      setPrintingLabels(false);
     }
   };
 
@@ -223,9 +285,59 @@ export default function ContactsPage({ onAdd, onEdit }) {
     setSelectedDistrict('');
     setSelectedCity('');
     setSelectedCategory('');
+    setSelectedRelation('');
+    setSelectedGrade('');
+    setSelectedHouseType('');
+    setSelectedPurchaseType('');
+    setSelectedProduct('');
   };
 
-  const hasActiveFilters = searchQuery || selectedState || selectedDistrict || selectedCity || selectedCategory;
+  const hasActiveFilters = searchQuery || selectedState || selectedDistrict || selectedCity ||
+    selectedCategory || selectedRelation || selectedGrade || selectedHouseType ||
+    selectedPurchaseType || selectedProduct;
+
+  const activeFilterCount = [selectedState, selectedDistrict, selectedCity, selectedCategory,
+    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, selectedRelation]
+    .filter(Boolean).length + (searchQuery ? 1 : 0);
+
+  // Column registry: label, optional header filter, and cell renderer.
+  const columnDefs = {
+    name: {
+      label: 'NAME',
+      filter: { mode: 'search', value: searchQuery, onChange: setSearchQuery, placeholder: 'Search name / phone / business…' },
+      render: c => (
+        <>
+          <div style={{ fontWeight: 600 }}>{c.honorific ? `${c.honorific} ` : ''}{c.full_name}</div>
+          {c.business_name && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{c.business_name}</div>}
+        </>
+      ),
+    },
+    relation: { label: 'RELATION', filter: { mode: 'select', options: relationOptions, value: selectedRelation, onChange: setSelectedRelation }, render: c => c.relation || '-' },
+    location: { label: 'LOCATION', filter: { mode: 'select', options: uniqueCities, value: selectedCity, onChange: setSelectedCity }, render: c => `${c.village_town || ''}${c.district ? `, ${c.district}` : ''}` || '-' },
+    phone: { label: 'PHONE', filter: { mode: 'search', value: searchQuery, onChange: setSearchQuery, placeholder: 'Search phone…' }, render: c => c.phone_1 || '-' },
+    type: {
+      label: 'TYPE',
+      filter: { mode: 'select', options: categoryOptions, value: selectedCategory, onChange: setSelectedCategory },
+      render: c => c.category ? <span className={`badge ${c.category.toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>{c.category}</span> : '-',
+    },
+    grade: { label: 'GRADE', filter: { mode: 'select', options: gradeOptions, value: selectedGrade, onChange: setSelectedGrade }, render: c => c.customer_grade || '-' },
+    house: { label: 'HOUSE', filter: { mode: 'select', options: houseOptions, value: selectedHouseType, onChange: setSelectedHouseType }, render: c => c.house_type || '-' },
+    purchase: { label: 'PURCHASE', filter: { mode: 'select', options: purchaseOptions, value: selectedPurchaseType, onChange: setSelectedPurchaseType }, render: c => c.purchase_type || '-' },
+    products: { label: 'PRODUCTS', filter: { mode: 'select', options: productOptions, value: selectedProduct, onChange: setSelectedProduct }, render: c => (Array.isArray(c.products) && c.products.length) ? c.products.join(', ') : '-' },
+    age: { label: 'AGE', render: c => c.age || '-' },
+    business: { label: 'BUSINESS', render: c => c.business_name || '-' },
+    insta: { label: 'INSTAGRAM', render: c => c.instagram_id || '-' },
+    state: { label: 'STATE', filter: { mode: 'select', options: uniqueStates, value: selectedState, onChange: v => { setSelectedState(v); setSelectedDistrict(''); setSelectedCity(''); } }, render: c => c.state || '-' },
+    district: { label: 'DISTRICT', filter: { mode: 'select', options: uniqueDistricts, value: selectedDistrict, onChange: v => { setSelectedDistrict(v); setSelectedCity(''); } }, render: c => c.district || '-' },
+    city: { label: 'VILLAGE / TOWN', filter: { mode: 'select', options: uniqueCities, value: selectedCity, onChange: setSelectedCity }, render: c => c.village_town || '-' },
+    pincode: { label: 'PINCODE', render: c => c.pincode || '-' },
+    date: { label: 'DATE', render: c => { const d = c.contact_date || c.createdAt; return d ? new Date(d).toLocaleDateString('en-GB') : '-'; } },
+    phone2: { label: 'PHONE 2', render: c => c.phone_2 || '-' },
+  };
+
+  const visibleColumns = columnOrder.filter(k => columnDefs[k] && !hiddenCols.includes(k));
+  const colCount = visibleColumns.length + 1; // + ACTIONS
+  const columnLabels = Object.fromEntries(columnOrder.map(k => [k, columnDefs[k]?.label || k]));
 
   return (
     <>
@@ -244,150 +356,172 @@ export default function ContactsPage({ onAdd, onEdit }) {
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
-          <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }}><Bell size={20} /></div>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            onClick={() => navigate('/settings')}
+            title="Settings"
+            style={{ width: 32, height: 32, borderRadius: '50%', background: '#CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          >
             <UserIcon size={18} color="white" />
           </div>
         </div>
       </div>
 
-      <div style={{ padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, borderBottom: '1px solid var(--border-color)' }}>
-        <div className="filters-group" style={{ flex: 1 }}>
-          <CustomSelect
-            className="select-input"
-            value={selectedState}
-            onChange={e => { setSelectedState(e.target.value); setSelectedDistrict(''); setSelectedCity(''); }}
-            options={[
-              { label: 'All States', value: '' },
-              ...uniqueStates.map(s => ({ label: s, value: s }))
-            ]}
-            placeholder="All States"
-          />
-
-          <CustomSelect
-            className="select-input"
-            value={selectedDistrict}
-            onChange={e => { setSelectedDistrict(e.target.value); setSelectedCity(''); }}
-            options={[
-              { label: 'All Districts', value: '' },
-              ...uniqueDistricts.map(d => ({ label: d, value: d }))
-            ]}
-            placeholder="All Districts"
-          />
-
-          <CustomSelect
-            className="select-input"
-            value={selectedCity}
-            onChange={e => setSelectedCity(e.target.value)}
-            options={[
-              { label: 'All Cities', value: '' },
-              ...uniqueCities.map(c => ({ label: c, value: c }))
-            ]}
-            placeholder="All Cities"
-          />
-
-          <CustomSelect
-            className="select-input"
-            value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
-            options={[
-              { label: 'All Categories', value: '' },
-              ...categories.map(cat => ({ label: cat, value: cat }))
-            ]}
-            placeholder="All Categories"
-          />
-
-          {hasActiveFilters && (
+      <div style={{ padding: '20px 32px', borderBottom: '1px solid var(--border-color)' }}>
+        {/* Controls row: Filters toggle (left) + actions (right) */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
-              className="btn-link"
-              onClick={clearFilters}
-              style={{ color: '#EF4444', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
+              className="btn"
+              onClick={() => setShowMoreFilters(o => !o)}
+              style={{
+                border: '1px solid var(--border-color)',
+                background: (showMoreFilters || hasActiveFilters) ? 'var(--highlight)' : 'var(--bg-white)',
+                color: (showMoreFilters || hasActiveFilters) ? 'var(--primary-accent)' : 'var(--text-dark)',
+              }}
             >
-              <X size={14} /> Clear
+              <SlidersHorizontal size={16} /> Filters
+              {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
             </button>
-          )}
+            {hasActiveFilters && (
+              <button
+                className="btn-link"
+                onClick={clearFilters}
+                style={{ color: '#EF4444', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
+              >
+                <X size={14} /> Clear all
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={handleLabels} disabled={printingLabels}
+              title="Print 50mm x 30mm mailing labels for the filtered contacts"
+              style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
+              <Tags size={16} /> {printingLabels ? 'Preparing…' : `Labels${hasActiveFilters ? ` (${total})` : ''}`}
+            </button>
+            <button className="btn" onClick={handleExport} disabled={exporting}
+              style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
+              <Download size={16} /> {exporting ? 'Exporting…' : `Export${hasActiveFilters ? ` (${total})` : ''}`}
+            </button>
+            <button className="btn btn-primary" onClick={onAdd}>+ Add Contact</button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button
-            className="btn"
-            onClick={handlePrint}
-            disabled={printing}
-            style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}
-          >
-            <Printer size={16} /> {printing ? 'Preparing…' : 'Print'}
-          </button>
-          <button
-            className="btn"
-            onClick={handleExport}
-            disabled={exporting}
-            style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}
-          >
-            <Download size={16} /> {exporting ? 'Exporting…' : `Export${hasActiveFilters ? ` (${total})` : ''}`}
-          </button>
-          <button className="btn btn-primary" onClick={onAdd}>+ Add Contact</button>
-        </div>
+        {/* Filter panel — labeled fields in an even grid */}
+        {showMoreFilters && (
+          <div className="filter-panel">
+            <div className="filter-field">
+              <label>State</label>
+              <CustomSelect value={selectedState}
+                onChange={e => { setSelectedState(e.target.value); setSelectedDistrict(''); setSelectedCity(''); }}
+                options={[{ label: 'All States', value: '' }, ...uniqueStates.map(s => ({ label: s, value: s }))]}
+                placeholder="All States" />
+            </div>
+            <div className="filter-field">
+              <label>District</label>
+              <CustomSelect value={selectedDistrict}
+                onChange={e => { setSelectedDistrict(e.target.value); setSelectedCity(''); }}
+                options={[{ label: 'All Districts', value: '' }, ...uniqueDistricts.map(d => ({ label: d, value: d }))]}
+                placeholder="All Districts" />
+            </div>
+            <div className="filter-field">
+              <label>City</label>
+              <CustomSelect value={selectedCity} onChange={e => setSelectedCity(e.target.value)}
+                options={[{ label: 'All Cities', value: '' }, ...uniqueCities.map(c => ({ label: c, value: c }))]}
+                placeholder="All Cities" />
+            </div>
+            <div className="filter-field">
+              <label>Category / Type</label>
+              <CustomSelect value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}
+                options={[{ label: 'All Types', value: '' }, ...categoryOptions.map(c => ({ label: c, value: c }))]}
+                placeholder="All Types" />
+            </div>
+            <div className="filter-field">
+              <label>Customer Grade</label>
+              <CustomSelect value={selectedGrade} onChange={e => setSelectedGrade(e.target.value)}
+                options={[{ label: 'All Grades', value: '' }, ...gradeOptions.map(g => ({ label: g, value: g }))]}
+                placeholder="All Grades" />
+            </div>
+            <div className="filter-field">
+              <label>Type of House</label>
+              <CustomSelect value={selectedHouseType} onChange={e => setSelectedHouseType(e.target.value)}
+                options={[{ label: 'All', value: '' }, ...houseOptions.map(h => ({ label: h, value: h }))]}
+                placeholder="All" />
+            </div>
+            <div className="filter-field">
+              <label>Type of Purchase</label>
+              <CustomSelect value={selectedPurchaseType} onChange={e => setSelectedPurchaseType(e.target.value)}
+                options={[{ label: 'All', value: '' }, ...purchaseOptions.map(p => ({ label: p, value: p }))]}
+                placeholder="All" />
+            </div>
+            <div className="filter-field">
+              <label>Products</label>
+              <CustomSelect value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)}
+                options={[{ label: 'All Products', value: '' }, ...productOptions.map(p => ({ label: p, value: p }))]}
+                placeholder="All Products" />
+            </div>
+            <div className="filter-field">
+              <label>Relation</label>
+              <CustomSelect value={selectedRelation} onChange={e => setSelectedRelation(e.target.value)}
+                options={[{ label: 'All Relations', value: '' }, ...relationOptions.map(r => ({ label: r, value: r }))]}
+                placeholder="All Relations" />
+            </div>
+          </div>
+        )}
+
       </div>
 
-      {/* Results summary */}
-      {hasActiveFilters && !loading && (
-        <div style={{ padding: '0 32px 8px 32px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          Found <strong>{total}</strong> matching {total === 1 ? 'contact' : 'contacts'}
-        </div>
-      )}
-
       <div className="page-container">
-        <div className="table-container">
+        <div className="table-container" style={{ opacity: loading && contacts.length > 0 ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
           <table className="data-table">
             <thead>
               <tr>
-                <th>NAME</th>
-                <th>RELATION</th>
-                <th>LOCATION</th>
-                <th>PHONE</th>
-                <th>TYPE</th>
+                {visibleColumns.map((key, i) => {
+                  const col = columnDefs[key];
+                  const alignRight = i === visibleColumns.length - 1;
+                  return (
+                    <th key={key}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {i === 0 && (
+                          <ColumnManager
+                            order={columnOrder}
+                            hidden={hiddenCols}
+                            labels={columnLabels}
+                            onToggle={toggleColumn}
+                            onReorder={reorderColumns}
+                          />
+                        )}
+                        {col.filter
+                          ? <ColumnFilter label={col.label} alignRight={alignRight} {...col.filter} />
+                          : <span>{col.label}</span>}
+                      </div>
+                    </th>
+                  );
+                })}
                 <th>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {loading && contacts.length === 0 ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '80%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '60%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '90%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '70%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '24px', width: '80px', borderRadius: '12px' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '24px', width: '50px' }}></div></td>
+                    {Array.from({ length: colCount }).map((__, j) => (
+                      <td key={j}><div className="shimmer-block" style={{ height: '20px', width: '75%' }}></div></td>
+                    ))}
                   </tr>
                 ))
               ) : total === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={colCount} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     {hasActiveFilters ? 'No contacts match your filters.' : 'No contacts found.'}
                   </td>
                 </tr>
               ) : (
                 contacts.map(contact => (
                   <tr key={contact._id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{contact.honorific ? `${contact.honorific} ` : ''}{contact.full_name}</div>
-                      {contact.business_name && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{contact.business_name}</div>}
-                    </td>
-                    <td>{contact.relation || '-'}</td>
-                    <td>{contact.village_town}{contact.district ? `, ${contact.district}` : ''}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {contact.phone_1}
-                      </div>
-                    </td>
-                    <td>
-                      {contact.category && (
-                        <span className={`badge ${contact.category.toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>
-                          {contact.category}
-                        </span>
-                      )}
-                    </td>
+                    {visibleColumns.map(key => (
+                      <td key={key}>{columnDefs[key].render(contact)}</td>
+                    ))}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <button
