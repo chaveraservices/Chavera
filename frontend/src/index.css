@@ -798,11 +798,11 @@ body {
 }
 .col-mgr-btn:hover { border-color: var(--primary-accent); color: var(--primary-accent); }
 /* Popover variant of the column panel, anchored under the header button */
+/* Portalled onto <body> and anchored in viewport coords by ColumnManager, so
+   the table's overflow-x container can't clip it. Offsets come from JS. */
 .columns-panel-pop {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 70;
+  position: fixed;
+  z-index: 200;
   margin-top: 0;
   width: 290px;
   max-width: none;
@@ -810,6 +810,16 @@ body {
   font-weight: 400;
   letter-spacing: normal;
   box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.25);
+  /* header stays put, the column list scrolls */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.columns-panel-pop .columns-list {
+  overflow-y: auto;
+  min-height: 0;
+  /* the panel's JS-computed maxHeight governs; don't double-cap here */
+  max-height: none;
 }
 .columns-panel-header {
   font-size: 0.72rem;

@@ -50,18 +50,25 @@ function arcPath(cx, cy, rOuter, rInner, start, end, gap) {
  * products, so the slice percentages are "share of all selections". The caller
  * is responsible for a caption that says so.
  */
-export default function DonutChart({ data, total, onSliceClick, valueNoun = 'selections' }) {
+export default function DonutChart({ data, onSliceClick, valueNoun = 'selections' }) {
   const [hover, setHover] = useState(null);
   const [showTable, setShowTable] = useState(false);
 
-  // Fold the tail into "Other" so we never exceed 6 segments.
+  // Fold anything past the 5 validated identity colours into a grey residual,
+  // so we never exceed 6 segments and never invent a 6th hue (a 6th colour
+  // fails the normal-vision separation floor against the magenta slot).
   const slices = useMemo(() => {
     const sorted = [...(data || [])].sort((a, b) => b.count - a.count);
-    if (sorted.length <= MAX_SLICES + 1) {
-      return sorted.map((d, i) => ({ ...d, color: SLICE_COLORS[i] || OTHER_COLOR, isOther: false }));
+    if (sorted.length <= MAX_SLICES) {
+      return sorted.map((d, i) => ({ ...d, color: SLICE_COLORS[i], isOther: false }));
     }
     const head = sorted.slice(0, MAX_SLICES).map((d, i) => ({ ...d, color: SLICE_COLORS[i], isOther: false }));
     const tail = sorted.slice(MAX_SLICES);
+    // A residual of exactly one product keeps its real name — folding a single
+    // item under "Other" would hide a category for no reason.
+    if (tail.length === 1) {
+      return [...head, { ...tail[0], color: OTHER_COLOR, isOther: false }];
+    }
     return [
       ...head,
       {
