@@ -2,12 +2,12 @@ import User from '../models/User.js';
 
 export function initKeepAlive() {
     const INTERVAL_MS = 14 * 60 * 1000; // 14 minutes
+    console.log("UAT established---------:",process.env.APP_ENV)
 
     setInterval(async () => {
         try {
             const isProduction = process.env.NODE_ENV === 'production' || process.env.APP_ENV === 'production';
             const isUAT = process.env.APP_ENV === 'uat';
-            console.log("UAT established---------:",isUAT)
             let shouldPing = false;
 
             if (isProduction) {

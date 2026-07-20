@@ -35,6 +35,11 @@ app.use('/api', apiLimiter);
 // API Routes
 app.use('/api', router);
 
+// Health check route for Render
+app.get('/', (req, res) => {
+    res.status(200).send('Chavera API is running!');
+});
+
 // 404 + central error handler (must be last)
 app.use(notFound);
 app.use(errorHandler);
