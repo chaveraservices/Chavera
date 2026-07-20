@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import DonutChart from '../components/DonutChart';
 import { Users, Store, UserCheck, Star } from 'lucide-react';
 
 // Horizontal bar list. Rows are clickable to drill into the Directory (via filterKey).
@@ -60,6 +61,8 @@ export default function DashboardPage() {
   const dealers = find(data?.byCategory, 'DEALER');
   const customers = find(data?.byCategory, 'CUSTOMER');
   const highPotential = find(data?.byGrade, 'High Potential');
+  // The donut's whole: every product selection made, across all contacts.
+  const productSelections = (data?.byProduct || []).reduce((s, d) => s + d.count, 0);
 
   return (
     <div className="page-container" style={{ paddingTop: 32 }}>
@@ -82,10 +85,25 @@ export default function DashboardPage() {
             <StatCard icon={<Star size={22} />} label="High Potential" value={highPotential} accent="#16A34A" />
           </div>
 
-          {/* Products — the core of the request */}
+          {/* Products — the core of the request. Two views of the same data:
+              the donut answers "what share of demand is each product", the bars
+              answer "exactly how many contacts buy each one". */}
+          <div className="form-section">
+            <div className="form-section-title">Product Mix</div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: -6, marginBottom: 14 }}>
+              Share of all {productSelections} product selections across {data?.productContacts ?? 0} contacts.
+              Contacts can choose more than one product, so shares are of selections — not of contacts.
+            </p>
+            <DonutChart
+              data={data?.byProduct}
+              onSliceClick={(label) => navigate(`/?product=${encodeURIComponent(label)}`)}
+              valueNoun="selections"
+            />
+          </div>
+
           <div className="form-section">
             <div className="form-section-title">Contacts by Product</div>
-            <Bars data={data?.byProduct} color="#E25C24" filterKey="product" navigate={navigate} emptyText="No products recorded on contacts yet." />
+            <Bars data={data?.byProduct} color="#2a78d6" filterKey="product" navigate={navigate} emptyText="No products recorded on contacts yet." />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>

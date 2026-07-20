@@ -99,7 +99,7 @@ export default class ContactController {
             { $project: { _id: 0, label: '$_id', count: 1 } },
         ]);
 
-        const [total, byProduct, byCategory, byPurchase, byGrade, byHouse, byState] = await Promise.all([
+        const [total, byProduct, productContacts, byCategory, byPurchase, byGrade, byHouse, byState] = await Promise.all([
             Contact.countDocuments(),
             Contact.aggregate([
                 { $unwind: '$products' },
@@ -108,6 +108,10 @@ export default class ContactController {
                 { $sort: { count: -1 } },
                 { $project: { _id: 0, label: '$_id', count: 1 } },
             ]),
+            // Contacts with at least one product. Distinct from the sum of
+            // byProduct counts, because products is multi-select — a contact
+            // buying a cot and a sofa set is counted once here but twice there.
+            Contact.countDocuments({ 'products.0': { $exists: true } }),
             groupCount('category'),
             groupCount('purchase_type'),
             groupCount('customer_grade'),
@@ -115,7 +119,7 @@ export default class ContactController {
             groupCount('state', 8),
         ]);
 
-        res.locals.data = { total, byProduct, byCategory, byPurchase, byGrade, byHouse, byState };
+        res.locals.data = { total, byProduct, productContacts, byCategory, byPurchase, byGrade, byHouse, byState };
         res.locals.message = 'Analytics fetched successfully';
         next();
     }
