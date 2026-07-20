@@ -28,6 +28,11 @@ router.post('/user/change-password', auth, h(userCtrl, 'changePassword'), respon
 
 // Admin routes (protected)
 router.post('/admin/db-stats', auth, h(adminCtrl, 'getDbStats'), responsedata);
+router.post('/admin/keep-alive-status', auth, h(adminCtrl, 'getKeepAliveStatus'), responsedata);
+router.post('/admin/toggle-keep-alive', auth, h(adminCtrl, 'toggleKeepAlive'), responsedata);
+
+// Health/Ping (public)
+router.post('/ping', h(adminCtrl, 'ping'), responsedata);
 
 // Location routes (public read, protected write)
 router.post('/location/list', h(locationCtrl, 'getAll'), responsedata);
@@ -47,6 +52,7 @@ router.post('/contact/update', auth, h(contact, 'update'), responsedata);
 router.post('/contact/delete', auth, h(contact, 'delete'), responsedata);
 router.post('/contact/list', auth, h(contact, 'getAll'), responsedata);
 router.post('/contact/filter-options', auth, h(contact, 'getFilterOptions'), responsedata);
+router.post('/contact/analytics', auth, h(contact, 'getAnalytics'), responsedata);
 router.post('/contact/town-suggestions', auth, h(contact, 'getTownSuggestions'), responsedata);
 router.post('/contact/get', auth, h(contact, 'getById'), responsedata);
 

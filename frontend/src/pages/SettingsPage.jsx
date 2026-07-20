@@ -27,11 +27,36 @@ export default function SettingsPage() {
   const [dbStatsLoading, setDbStatsLoading] = useState(false);
   const [dbStatsError, setDbStatsError] = useState('');
 
+  const [keepAliveEnabled, setKeepAliveEnabled] = useState(false);
+  const [keepAliveLoading, setKeepAliveLoading] = useState(false);
+
   useEffect(() => {
     const savedPrefs = localStorage.getItem('chavera_prefs');
     if (savedPrefs) { try { setPrefs(JSON.parse(savedPrefs)); } catch { /* ignore */ } }
     fetchDbStats();
+    fetchKeepAliveStatus();
   }, []);
+
+  const fetchKeepAliveStatus = async () => {
+    try {
+      const res = await api.post('/admin/keep-alive-status');
+      setKeepAliveEnabled(res.data.data.keepAliveEnabled);
+    } catch (err) {
+      console.error('Failed to load keep-alive status', err);
+    }
+  };
+
+  const toggleKeepAlive = async () => {
+    setKeepAliveLoading(true);
+    try {
+      const res = await api.post('/admin/toggle-keep-alive');
+      setKeepAliveEnabled(res.data.data.keepAliveEnabled);
+    } catch (err) {
+      console.error('Failed to toggle keep-alive', err);
+    } finally {
+      setKeepAliveLoading(false);
+    }
+  };
 
   const fetchDbStats = async () => {
     setDbStatsLoading(true);
@@ -164,6 +189,30 @@ export default function SettingsPage() {
           {prefSaved ? <CheckCircle size={16} /> : <Save size={16} />}
           {prefSaved ? 'Saved!' : 'Save Preferences'}
         </button>
+      </Section>
+
+      {/* Server Preferences */}
+      <Section title="SERVER SETTINGS (UAT ONLY)">
+        <div className="form-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+          <div>
+            <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 4 }}>14-Minute Keep-Alive</div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Prevent the server from sleeping due to inactivity. (Always ON in Production)</div>
+          </div>
+          <button 
+            type="button"
+            onClick={toggleKeepAlive} 
+            disabled={keepAliveLoading}
+            style={{
+              position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none', cursor: keepAliveLoading ? 'wait' : 'pointer',
+              background: keepAliveEnabled ? '#10b981' : '#cbd5e1', transition: 'background 0.3s'
+            }}
+          >
+            <div style={{
+              position: 'absolute', top: 2, left: keepAliveEnabled ? 22 : 2, width: 20, height: 20,
+              background: 'white', borderRadius: '50%', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+            }} />
+          </button>
+        </div>
       </Section>
       </div>
 

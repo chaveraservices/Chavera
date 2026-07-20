@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import api from '../utils/api';
 import useDebounce from '../utils/useDebounce';
 import { contactsToExportRows } from '../utils/contactFields';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, User as UserIcon, Download, Trash2, X, Tags, SlidersHorizontal } from 'lucide-react';
 import ColumnManager from '../components/ColumnManager';
 import CustomSelect from '../components/CustomSelect';
@@ -18,6 +18,7 @@ const DEFAULT_HIDDEN = ['grade', 'house', 'purchase', 'products', 'age', 'busine
 
 export default function ContactsPage({ onAdd, onEdit }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [contacts, setContacts] = useState([]); // current page only
   const [total, setTotal] = useState(0);        // matching count (server)
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
   const [contactToDelete, setContactToDelete] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [printingLabels, setPrintingLabels] = useState(false);
-  const [alertConfig, setAlertConfig] = useState({ isOpen: false, message: '', type: 'error' });
+  const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'error' });
 
   // Filter options (distinct values from the server)
   const [tuples, setTuples] = useState([]);        // [{state, district, city}]
@@ -127,6 +128,29 @@ export default function ContactsPage({ onAdd, onEdit }) {
       .catch(err => console.error(err));
   }, [refreshTick]);
 
+  // Pre-apply filters passed in the URL (e.g. from the Dashboard drill-down).
+  useEffect(() => {
+    const setters = {
+      product: setSelectedProduct,
+      category: setSelectedCategory,
+      customer_grade: setSelectedGrade,
+      house_type: setSelectedHouseType,
+      purchase_type: setSelectedPurchaseType,
+      state: setSelectedState,
+      district: setSelectedDistrict,
+      city: setSelectedCity,
+      relation: setSelectedRelation,
+    };
+    let applied = false;
+    for (const [key, setter] of Object.entries(setters)) {
+      const v = searchParams.get(key);
+      if (v) { setter(v); applied = true; }
+    }
+    if (applied) setShowMoreFilters(true);
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Reset to page 1 whenever filters or page size change.
   useEffect(() => {
     setPage(1);
@@ -206,7 +230,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
       const res = await api.post('/contact/list', { all: true, ...filterParams });
       const source = res.data?.data?.items || [];
       if (source.length === 0) {
-        setAlertConfig({ isOpen: true, message: 'No contacts to print labels for', type: 'error' });
+        setAlertConfig({ isOpen: true, title: 'Nothing to Print', message: 'No contacts match the current filters, so there are no labels to print.', type: 'info' });
         return;
       }
 
@@ -224,31 +248,33 @@ export default function ContactsPage({ onAdd, onEdit }) {
 
       const html = `<html><head><title>Mailing Labels</title><style>
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: Arial, Helvetica, sans-serif; }
-        .sheet { display: flex; flex-wrap: wrap; }
+        html, body { margin: 0; padding: 0; }
+        body { font-family: Arial, Helvetica, sans-serif; }
+        /* One 50x30mm label per page — for a roll / label printer */
+        @page { size: 50mm 30mm; margin: 0; }
         .label {
           width: 50mm; height: 30mm; padding: 2mm 3mm; overflow: hidden;
-          border: 0.2mm solid #e5e5e5;
           display: flex; flex-direction: column; justify-content: center;
+          page-break-after: always; break-after: page;
         }
+        .label:last-child { page-break-after: auto; break-after: auto; }
         .lname { font-weight: bold; font-size: 9pt; line-height: 1.15; }
         .laddr { font-size: 7.5pt; line-height: 1.2; margin-top: 1mm; }
         .lphone { font-size: 7.5pt; margin-top: 1mm; }
-        @page { margin: 5mm; }
-        @media print { .label { break-inside: avoid; } }
-      </style></head><body><div class="sheet">${labels}</div></body></html>`;
+      </style></head><body>${labels}</body></html>`;
 
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
-      iframe.contentDocument.open();
-      iframe.contentDocument.write(html);
-      iframe.contentDocument.close();
-      setTimeout(() => {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        setTimeout(() => document.body.removeChild(iframe), 1000);
-      }, 400);
+      // Print from a real window (not an iframe) so the @page 50x30mm size is honored.
+      const win = window.open('', '_blank', 'width=420,height=600');
+      if (!win) {
+        setAlertConfig({ isOpen: true, message: 'Please allow pop-ups for this site to print labels.', type: 'error' });
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      win.onafterprint = () => win.close();
+      setTimeout(() => win.print(), 350);
     } catch (err) {
       setAlertConfig({ isOpen: true, message: err.response?.data?.message || 'Failed to prepare labels', type: 'error' });
     } finally {
@@ -263,7 +289,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
       const res = await api.post('/contact/list', { all: true, ...filterParams });
       const source = res.data?.data?.items || [];
       if (source.length === 0) { 
-        setAlertConfig({ isOpen: true, message: 'No contacts to export', type: 'error' });
+        setAlertConfig({ isOpen: true, title: 'Nothing to Export', message: 'No contacts match the current filters, so there is nothing to export.', type: 'info' });
         return; 
       }
 
@@ -290,6 +316,9 @@ export default function ContactsPage({ onAdd, onEdit }) {
     setSelectedHouseType('');
     setSelectedPurchaseType('');
     setSelectedProduct('');
+    // Drop any drill-down params left in the URL by the Dashboard, so the
+    // address bar matches the (now empty) filter state.
+    if (searchParams.toString()) setSearchParams({}, { replace: true });
   };
 
   const hasActiveFilters = searchQuery || selectedState || selectedDistrict || selectedCity ||
@@ -632,10 +661,10 @@ export default function ContactsPage({ onAdd, onEdit }) {
 
       <AlertModal
         isOpen={alertConfig.isOpen}
-        title={alertConfig.type === 'error' ? 'Error' : 'Success'}
+        title={alertConfig.title || (alertConfig.type === 'error' ? 'Error' : 'Success')}
         message={alertConfig.message}
         type={alertConfig.type}
-        onClose={() => setAlertConfig({ isOpen: false, message: '', type: 'error' })}
+        onClose={() => setAlertConfig({ isOpen: false, title: '', message: '', type: 'error' })}
       />
     </>
   );

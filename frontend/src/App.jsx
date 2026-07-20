@@ -1,9 +1,10 @@
 import { useState, Suspense, lazy } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { Users, Upload, Settings, LogOut } from 'lucide-react';
+import { Users, Upload, Settings, LogOut, LayoutDashboard } from 'lucide-react';
 
 // Lazy loaded pages
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
 const ContactForm = lazy(() => import('./components/ContactForm'));
 const ImportPage = lazy(() => import('./pages/ImportPage'));
@@ -36,6 +37,7 @@ function App() {
   );
 
   const navItems = [
+    { path: '/dashboard',icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
     { path: '/',         icon: <Users size={18} />,   label: 'Directory'  },
     { path: '/import',   icon: <Upload size={18} />,   label: 'Import'     },
     { path: '/settings', icon: <Settings size={18} />, label: 'Settings'   },
@@ -104,6 +106,7 @@ function App() {
                 onSave={() => navigate('/')}
               />
             } />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/import" element={
               <ImportPage onComplete={() => navigate('/')} />
             } />

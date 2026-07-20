@@ -89,6 +89,37 @@ export default class ContactController {
         next();
     }
 
+    // Aggregated analytics for the dashboard.
+    async getAnalytics(req, res, next) {
+        const groupCount = (field, limit) => Contact.aggregate([
+            { $match: { [field]: { $nin: [null, ''] } } },
+            { $group: { _id: `$${field}`, count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            ...(limit ? [{ $limit: limit }] : []),
+            { $project: { _id: 0, label: '$_id', count: 1 } },
+        ]);
+
+        const [total, byProduct, byCategory, byPurchase, byGrade, byHouse, byState] = await Promise.all([
+            Contact.countDocuments(),
+            Contact.aggregate([
+                { $unwind: '$products' },
+                { $match: { products: { $nin: [null, ''] } } },
+                { $group: { _id: '$products', count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+                { $project: { _id: 0, label: '$_id', count: 1 } },
+            ]),
+            groupCount('category'),
+            groupCount('purchase_type'),
+            groupCount('customer_grade'),
+            groupCount('house_type'),
+            groupCount('state', 8),
+        ]);
+
+        res.locals.data = { total, byProduct, byCategory, byPurchase, byGrade, byHouse, byState };
+        res.locals.message = 'Analytics fetched successfully';
+        next();
+    }
+
     // Distinct village/town values already entered — powers the town autocomplete
     // so the app "learns" the small places a user actually works in.
     async getTownSuggestions(req, res, next) {
