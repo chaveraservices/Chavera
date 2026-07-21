@@ -1019,3 +1019,189 @@ textarea.input-error-field {
 .dot-duplicate { background-color: #3B82F6; }
 .dot-missing   { background-color: #94A3B8; }
 
+
+/* Date-range control (dashboard) — presets above a custom from/to. */
+.date-range-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 80;
+  width: 300px;
+  padding: 6px;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.25);
+}
+.date-range-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--text-dark);
+  cursor: pointer;
+}
+.date-range-opt:hover { background: var(--bg-main); }
+.date-range-custom {
+  margin-top: 6px;
+  padding: 12px 10px 10px;
+  border-top: 1px solid var(--border-color);
+}
+.date-range-custom .form-input { padding: 8px 10px; font-size: 0.85rem; min-width: 0; flex: 1; }
+
+/* ---- Range calendar -------------------------------------------------- */
+/* Replaces <input type="date">, whose native picker can't be styled and
+   ignores the app's typeface and accent colour. */
+.cal { user-select: none; }
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.cal-title {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.cal-title:hover { background: var(--bg-main); }
+.cal-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.cal-nav:hover { background: var(--bg-main); color: var(--text-dark); }
+
+.cal-dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 2px;
+}
+.cal-dow span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  /* No row gap: the selected range reads as one continuous band. */
+  row-gap: 2px;
+}
+/* The cell carries the band; the button inside carries the day. */
+.cal-cell { position: relative; display: flex; justify-content: center; }
+.cal-cell.in-range { background: var(--highlight); }
+.cal-cell.band-start {
+  background: linear-gradient(to right, transparent 50%, var(--highlight) 50%);
+}
+.cal-cell.band-end {
+  background: linear-gradient(to left, transparent 50%, var(--highlight) 50%);
+}
+
+.cal-day {
+  position: relative;
+  width: 32px; height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.cal-day:hover { background: var(--border-color); }
+.cal-day.is-outside { color: #CBD5E1; }
+.cal-day.is-today {
+  font-weight: 700;
+  color: var(--primary-accent);
+  box-shadow: inset 0 0 0 1px var(--primary-accent);
+}
+.cal-day.is-selected {
+  background: var(--primary-accent);
+  color: #fff;
+  font-weight: 700;
+}
+.cal-day.is-selected:hover { background: var(--primary-accent-hover); }
+.cal-day:focus-visible {
+  outline: 2px solid var(--primary-accent);
+  outline-offset: 1px;
+}
+
+.cal-months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px 0;
+}
+.cal-month {
+  padding: 10px 0;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-main);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  cursor: pointer;
+}
+.cal-month:hover { background: var(--border-color); }
+.cal-month.is-current { background: var(--primary-accent); color: #fff; }
+
+/* From/To readout above the grid */
+.cal-readout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cal-readout-slot {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-white);
+}
+.cal-readout-slot.is-active { border-color: var(--primary-accent); }
+.cal-readout-slot span {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.cal-readout-slot strong {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  font-variant-numeric: tabular-nums;
+}
+.cal-readout-sep { color: var(--text-muted); flex-shrink: 0; }
+

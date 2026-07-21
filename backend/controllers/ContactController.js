@@ -6,6 +6,31 @@ const REQUIRED_MSG = 'Missing required fields: full_name, village_town, or phone
 // Escape user input before using it inside a RegExp.
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// A contact's effective date for range filtering: the manually entered
+// contact_date, falling back to when the record was created. Contacts imported
+// before the Date column existed have no contact_date, and dropping them from
+// every range would make the dashboard look empty rather than honest.
+const EFFECTIVE_DATE = { $ifNull: ['$contact_date', '$createdAt'] };
+
+// Builds the $expr for a [from, to] window. Dates arrive as 'YYYY-MM-DD' and are
+// interpreted in server-local time, inclusive of the whole `to` day. Returns
+// null when no usable bound was supplied, so callers can skip the stage.
+const dateRangeExpr = (from, to) => {
+    const conds = [];
+    const parse = (v, endOfDay) => {
+        if (!v || typeof v !== 'string') return null;
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(v)
+            ? new Date(`${v}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`)
+            : new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const f = parse(from, false);
+    const t = parse(to, true);
+    if (f) conds.push({ $gte: [EFFECTIVE_DATE, f] });
+    if (t) conds.push({ $lte: [EFFECTIVE_DATE, t] });
+    return conds.length ? { $and: conds } : null;
+};
+
 export default class ContactController {
     // Paginated + filtered list.
     // Body: { page, pageSize, search, state, district, city, category, all }
@@ -90,8 +115,16 @@ export default class ContactController {
     }
 
     // Aggregated analytics for the dashboard.
+    // Body: { from, to } — optional 'YYYY-MM-DD' window scoping every figure.
     async getAnalytics(req, res, next) {
+        const { from, to } = req.body || {};
+        const range = dateRangeExpr(from, to);
+        // Prepended to every pipeline so the whole dashboard moves together.
+        const scope = range ? [{ $match: { $expr: range } }] : [];
+        const scopeQuery = range ? { $expr: range } : {};
+
         const groupCount = (field, limit) => Contact.aggregate([
+            ...scope,
             { $match: { [field]: { $nin: [null, ''] } } },
             { $group: { _id: `$${field}`, count: { $sum: 1 } } },
             { $sort: { count: -1 } },
@@ -100,8 +133,9 @@ export default class ContactController {
         ]);
 
         const [total, byProduct, productContacts, byCategory, byPurchase, byGrade, byHouse, byState] = await Promise.all([
-            Contact.countDocuments(),
+            Contact.countDocuments(scopeQuery),
             Contact.aggregate([
+                ...scope,
                 { $unwind: '$products' },
                 { $match: { products: { $nin: [null, ''] } } },
                 { $group: { _id: '$products', count: { $sum: 1 } } },
@@ -111,7 +145,7 @@ export default class ContactController {
             // Contacts with at least one product. Distinct from the sum of
             // byProduct counts, because products is multi-select — a contact
             // buying a cot and a sofa set is counted once here but twice there.
-            Contact.countDocuments({ 'products.0': { $exists: true } }),
+            Contact.countDocuments({ ...scopeQuery, 'products.0': { $exists: true } }),
             groupCount('category'),
             groupCount('purchase_type'),
             groupCount('customer_grade'),

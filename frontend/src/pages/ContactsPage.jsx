@@ -422,6 +422,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
             )}
           </div>
 
+
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button className="btn" onClick={handleLabels} disabled={printingLabels}
               title="Print 50mm x 30mm mailing labels for the filtered contacts"

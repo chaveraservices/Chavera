@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import DonutChart from '../components/DonutChart';
+import DateRangeFilter from '../components/DateRangeFilter';
 import { Users, Store, UserCheck, Star } from 'lucide-react';
 
 // Horizontal bar list. Rows are clickable to drill into the Directory (via filterKey).
@@ -47,13 +48,18 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // "All time" first — the dashboard opens showing everything, then narrows.
+  const [range, setRange] = useState({ preset: 'all', from: null, to: null });
 
   useEffect(() => {
-    api.post('/contact/analytics')
-      .then(res => { if (res.data.success) setData(res.data.data); })
-      .catch(err => console.error(err))
-      .finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    api.post('/contact/analytics', { from: range.from, to: range.to })
+      .then(res => { if (!cancelled && res.data.success) setData(res.data.data); })
+      .catch(err => { if (!cancelled) console.error(err); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [range.from, range.to]);
 
   const find = (arr, label) => (arr || []).find(x => (x.label || '').toUpperCase() === label.toUpperCase())?.count || 0;
 
@@ -71,12 +77,24 @@ export default function DashboardPage() {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-dark)' }}>Dashboard</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>Product &amp; customer analytics — click any bar to see those contacts</p>
         </div>
+        {/* One filter row above everything it scopes: every figure below moves
+            with this control. Scopes the dashboard only — the Directory keeps
+            its own filters and is not affected. */}
+        <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
-      {loading ? (
+      {range.preset !== 'all' && (
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: 16 }}>
+          Dated by the contact&apos;s <strong>Date</strong> field, or the date it was added when no Date is set.
+        </div>
+      )}
+
+      {loading && !data ? (
         <div style={{ color: 'var(--text-muted)', padding: '2rem 0' }}>Loading analytics…</div>
       ) : (
-        <>
+        // On refetch, hold the previous render dimmed rather than flashing a
+        // skeleton and jumping the layout.
+        <div style={loading ? { opacity: 0.55, pointerEvents: 'none' } : undefined}>
           {/* Stat cards */}
           <div className="stat-grid">
             <StatCard icon={<Users size={22} />} label="Total Contacts" value={total} accent="#E25C24" />
@@ -130,7 +148,7 @@ export default function DashboardPage() {
             <div className="form-section-title">Top States</div>
             <Bars data={data?.byState} color="#2C5282" filterKey="state" navigate={navigate} />
           </div>
-        </>
+        </div>
       )}
     </div>
   );
