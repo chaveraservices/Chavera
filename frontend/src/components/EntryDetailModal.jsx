@@ -99,7 +99,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
         </div>
 
         {/* Actions. Print Label is the per-entry button asked for; it prints
-            exactly this one contact at 50x30mm. */}
+            exactly this one contact at 75x50mm. */}
         <div className="entry-modal-actions">
           <a className="entry-action" href={`tel:${c.phone_1}`} title={`Call ${c.phone_1}`}>
             <Phone size={17} /><span>Call</span>
@@ -112,7 +112,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
           >
             <MapPin size={17} /><span>Map</span>
           </a>
-          <button type="button" className="entry-action is-primary" onClick={handleLabel} title="Print a 50mm x 30mm label for this entry">
+          <button type="button" className="entry-action is-primary" onClick={handleLabel} title="Print a 75mm x 50mm label for this entry">
             <Tags size={17} /><span>Print Label</span>
           </button>
           {onDelete && (

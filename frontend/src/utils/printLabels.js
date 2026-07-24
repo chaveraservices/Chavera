@@ -1,4 +1,4 @@
-// Shared 50mm x 30mm mailing-label printing, used by both the bulk "Labels"
+// Shared 75mm x 50mm mailing-label printing, used by both the bulk "Labels"
 // button on the Entry list and the single-entry button in the detail modal.
 // Kept in one place so a fix to the label layout can never apply to one and
 // not the other.
@@ -21,17 +21,17 @@ export const labelHtml = (contacts) => {
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; }
-    /* One 50x30mm label per page — for a roll / label printer */
-    @page { size: 50mm 30mm; margin: 0; }
+    /* One 75x50mm label per page — for a roll / label printer */
+    @page { size: 75mm 50mm; margin: 0; }
     .label {
-      width: 50mm; height: 30mm; padding: 2mm 3mm; overflow: hidden;
+      width: 75mm; height: 50mm; padding: 4mm 5mm; overflow: hidden;
       display: flex; flex-direction: column; justify-content: center;
       page-break-after: always; break-after: page;
     }
     .label:last-child { page-break-after: auto; break-after: auto; }
-    .lname { font-weight: bold; font-size: 9pt; line-height: 1.15; }
-    .laddr { font-size: 7.5pt; line-height: 1.2; margin-top: 1mm; }
-    .lphone { font-size: 7.5pt; margin-top: 1mm; }
+    .lname { font-weight: bold; font-size: 12pt; line-height: 1.2; }
+    .laddr { font-size: 10pt; line-height: 1.3; margin-top: 2mm; }
+    .lphone { font-size: 10pt; margin-top: 2mm; }
   </style></head><body>${labels}</body></html>`;
 };
 
