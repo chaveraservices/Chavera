@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lock, Save, CheckCircle } from 'lucide-react';
-import CustomSelect from '../components/CustomSelect';
+import { Lock, CheckCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import UserAccessPanel from '../components/UserAccessPanel';
@@ -20,14 +19,10 @@ export default function SettingsPage() {
   const profile = user || { name: '', email: '' };
   // Sessions predating roles carry none; treat those as admin (matches the API).
   const isAdmin = (user?.role || 'admin') === 'admin';
-  // Tabs instead of one long scroll: every section is now one click away.
-  const [tab, setTab] = useState('account');
   const [pwData, setPwData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
-  const [prefs, setPrefs] = useState({ defaultCategory: '' });
-  const [prefSaved, setPrefSaved] = useState(false);
 
   const [dbStats, setDbStats] = useState(null);
   const [dbStatsLoading, setDbStatsLoading] = useState(false);
@@ -37,8 +32,6 @@ export default function SettingsPage() {
   const [keepAliveLoading, setKeepAliveLoading] = useState(false);
 
   useEffect(() => {
-    const savedPrefs = localStorage.getItem('chavera_prefs');
-    if (savedPrefs) { try { setPrefs(JSON.parse(savedPrefs)); } catch { /* ignore */ } }
     fetchDbStats();
     fetchKeepAliveStatus();
   }, []);
@@ -100,11 +93,6 @@ export default function SettingsPage() {
     } finally { setPwLoading(false); }
   };
 
-  const handleSavePrefs = () => {
-    localStorage.setItem('chavera_prefs', JSON.stringify(prefs));
-    setPrefSaved(true);
-    setTimeout(() => setPrefSaved(false), 2500);
-  };
 
   return (
     <div className="page-container" style={{ paddingTop: 32, maxWidth: 1200 }}>
@@ -112,49 +100,27 @@ export default function SettingsPage() {
         <h1>Settings</h1>
       </div>
 
-      <div className="settings-tabs" role="tablist">
-        {[
-          ['account', 'Account'],
-          ...(isAdmin ? [['users', 'Users & Roles'], ['system', 'System']] : []),
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={`settings-tab ${tab === id ? 'active' : ''}`}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="settings-panel">
-        {tab === 'account' && (<>
+      {/* One page, two columns so it packs onto ~one screen without tabs. The
+          long lists (users, products) scroll inside their own panels, so they
+          can't stretch the page into a long scroll. */}
+      <div className="settings-cols">
+      <div className="settings-col">
       <Section title="PROFILE">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <div style={{
-            width: 64, height: 64, borderRadius: '50%',
+            width: 60, height: 60, borderRadius: '50%', flexShrink: 0,
             background: 'linear-gradient(135deg, var(--primary-accent), #f59e0b)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--bg-white)', fontSize: '1.6rem', fontWeight: 700,
+            color: '#fff', fontSize: '1.5rem', fontWeight: 700,
           }}>
             {profile.name ? profile.name[0].toUpperCase() : '?'}
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-dark)' }}>{profile.name || '—'}</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{profile.email || '—'}</div>
-          </div>
-        </div>
-        <div className="form-grid">
-          <div className="form-group">
-            <label>Name</label>
-            <input className="input-field" value={profile.name} disabled style={{ background: 'var(--bg-main)', cursor: 'not-allowed' }} />
-          </div>
-          <div className="form-group">
-            <label>Email</label>
-            <input className="input-field" value={profile.email} disabled style={{ background: 'var(--bg-main)', cursor: 'not-allowed' }} />
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', wordBreak: 'break-all' }}>{profile.email || '—'}</div>
+            <span className={`role-badge ${isAdmin ? 'is-admin' : ''}`} style={{ display: 'inline-block', marginTop: 8 }}>
+              {isAdmin ? 'Super Admin' : 'Staff'}
+            </span>
           </div>
         </div>
       </Section>
@@ -168,12 +134,13 @@ export default function SettingsPage() {
               <CheckCircle size={16} /> {pwSuccess}
             </div>
           )}
-          <div className="form-grid">
+          {/* Single column so the three fields read top-to-bottom in the order
+              you fill them, instead of scattering across a 2-col grid. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="form-group">
               <label>Current Password</label>
               <input type="password" name="currentPassword" value={pwData.currentPassword} onChange={handlePwChange} className="input-field" placeholder="Enter current password" required />
             </div>
-            <div />
             <div className="form-group">
               <label>New Password</label>
               <input type="password" name="newPassword" value={pwData.newPassword} onChange={handlePwChange} className="input-field" placeholder="Min. 6 characters" required />
@@ -189,48 +156,9 @@ export default function SettingsPage() {
         </form>
       </Section>
 
-      {/* App Preferences */}
-      <Section title="APP PREFERENCES">
-        <div className="form-grid">
-          <div className="form-group">
-            <label>Default Category</label>
-            <CustomSelect 
-              value={prefs.defaultCategory} 
-              onChange={e => setPrefs({ ...prefs, defaultCategory: e.target.value })}
-              options={[
-                { label: 'None', value: '' },
-                { label: 'DEALER', value: 'DEALER' },
-                { label: 'CUSTOMER', value: 'CUSTOMER' }
-              ]}
-              placeholder="Select Category"
-            />
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pre-filled when adding contacts</span>
-          </div>
-        </div>
-        <button className="btn btn-primary" onClick={handleSavePrefs} style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-          {prefSaved ? <CheckCircle size={16} /> : <Save size={16} />}
-          {prefSaved ? 'Saved!' : 'Save Preferences'}
-        </button>
-      </Section>
-        </>)}
-
-        {tab === 'users' && isAdmin && (
-          <Section title="USER ACCESS &amp; ROLES">
-            <UserAccessPanel />
-          </Section>
-        )}
-
-        {tab === 'system' && isAdmin && (<>
-
-      <Section title="PRODUCTS">
-        <ProductManager />
-      </Section>
-
-
-
       {/* Server Preferences */}
       {isAdmin && (
-      <Section title="SERVER SETTINGS (UAT ONLY)">
+      <Section title="SERVER SETTINGS">
         <div className="form-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
           <div>
             <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 4 }}>14-Minute Keep-Alive</div>
@@ -253,9 +181,20 @@ export default function SettingsPage() {
         </div>
       </Section>
       )}
+      </div>
+
+      {/* Right column — the taller admin panels. */}
+      {isAdmin && (
+      <div className="settings-col">
+      <Section title="USER ACCESS &amp; ROLES">
+        <UserAccessPanel />
+      </Section>
+
+      <Section title="PRODUCTS">
+        <ProductManager />
+      </Section>
 
       {/* Database Monitoring */}
-      {isAdmin && (
       <Section title="DATABASE STORAGE MONITORING">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Real-time MongoDB storage metrics</span>
@@ -333,8 +272,8 @@ export default function SettingsPage() {
           );
         })()}
       </Section>
+      </div>
       )}
-        </>)}
       </div>
     </div>
   );

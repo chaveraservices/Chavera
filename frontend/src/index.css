@@ -1468,7 +1468,15 @@ html.modal-open .main-content {
   border-radius: 12px;
 }
 
-.access-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .access-row {
   display: flex;
   align-items: center;
@@ -1771,7 +1779,14 @@ html.modal-open .main-content {
 /* ---- Product catalogue manager (Settings › System) ---------------------- */
 .prodmgr-add { display: flex; gap: 8px; margin-bottom: 14px; }
 .prodmgr-add .input-field { flex: 1; }
-.prodmgr-list { display: flex; flex-direction: column; gap: 6px; }
+.prodmgr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .prodmgr-row {
   display: flex;
   align-items: center;
@@ -1818,3 +1833,18 @@ html.modal-open .main-content {
 }
 .product-add-inline input::placeholder { color: #5A5A57; }
 .product-add-inline .entry-icon-btn { width: 26px; height: 26px; }
+
+/* Account tab: a single readable column instead of two mismatched-height
+   cards splitting a wide grid — the main source of the "scattered" look. */
+/* Two-column settings so everything packs onto ~one screen — no tabs, minimal
+   scroll. Columns top-align; each is a controlled stack (not ragged masonry). */
+.settings-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 0 24px;
+  align-items: start;
+}
+.settings-col { min-width: 0; }
+@media (max-width: 800px) {
+  .settings-cols { grid-template-columns: 1fr; }
+}
