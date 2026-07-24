@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Plus } from 'lucide-react';
 import CustomSelect from './CustomSelect';
+import ConfirmEntryModal from './ConfirmEntryModal';
 import ComboBox from './ComboBox';
 import api from '../utils/api';
-import { PRODUCT_OPTIONS, CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES } from '../utils/contactFields';
+import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES } from '../utils/contactFields';
+import useProducts from '../utils/useProducts';
+import { useAuth } from '../context/AuthContext';
 
 // ---------- validation rules ----------
 const RULES = {
@@ -58,17 +62,38 @@ function validateAll(data) {
 }
 
 // ---------- component ----------
-export default function ContactForm({ contact, onCancel, onSave }) {
+export default function ContactForm({ contact, onCancel, onSave, onClose }) {
+  const { products: productCatalogue, addProduct } = useProducts();
+  const { user } = useAuth();
+  const canAddProduct = (user?.role || 'admin') === 'admin';
+
+  // Inline "add a product" state, so a new product can be created without
+  // leaving the form. Creation is admin-only (the API enforces it).
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [newProductName, setNewProductName] = useState('');
+  const [addProductErr, setAddProductErr] = useState('');
+  const [addingProduct, setAddingProduct] = useState(false);
+
+  const submitNewProduct = async () => {
+    setAddingProduct(true);
+    setAddProductErr('');
+    const res = await addProduct(newProductName);
+    setAddingProduct(false);
+    if (!res.ok) { setAddProductErr(res.error); return; }
+    // Auto-select the product just added, and reset the inline input.
+    if (!formData.products.includes(res.name)) {
+      setFormData(prev => ({ ...prev, products: [...prev.products, res.name] }));
+    }
+    setNewProductName('');
+    setShowAddProduct(false);
+  };
   const [formData, setFormData] = useState({
     honorific: contact?.honorific || '',
     full_name: contact?.full_name || '',
-    relation: contact?.relation || '',
     business_name: contact?.business_name || '',
-    age: contact?.age || '',
     ppr: contact?.ppr || '',
     toq: contact?.toq || '',
     instagram_id: contact?.instagram_id || '',
-    product_name: contact?.product_name || '',
     customer_occupation: contact?.customer_occupation || '',
     door_flat_no: contact?.door_flat_no || '',
     street: contact?.street || '',
@@ -96,6 +121,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
   // Server-level error banner
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false); // review step before save
 
   // Locations — states + district NAMES only (cities are lazy-loaded per district
   // so the form never ships the full 150k-city dataset).
@@ -141,6 +167,13 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     }
   }, [formData.phone_1]);
 
+  // True once the user has typed a business name of their own, which stops it
+  // mirroring the full name. Seeded true when editing a contact whose business
+  // name already differs, so opening an old record never rewrites it.
+  const businessTouchedRef = useRef(
+    !!(contact?.business_name && contact.business_name !== contact.full_name)
+  );
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     let next;
@@ -150,8 +183,16 @@ export default function ContactForm({ contact, onCancel, onSave }) {
       next = { ...formData, district: value, village_town: '' };
     } else if (['phone_1', 'phone_2', 'pincode'].includes(name)) {
       next = { ...formData, [name]: value.replace(/\D/g, '') };
+    } else if (name === 'full_name') {
+      // #9: business name follows the full name by default. Once the user
+      // types their own business name it stops mirroring, so a deliberate
+      // value is never overwritten by later edits to the name.
+      next = { ...formData, full_name: value };
+      if (!businessTouchedRef.current) next.business_name = value;
     } else {
       next = { ...formData, [name]: value };
+      // Typing in Business Name breaks the mirror for good.
+      if (name === 'business_name') businessTouchedRef.current = true;
     }
 
     setFormData(next);
@@ -195,14 +236,20 @@ export default function ContactForm({ contact, onCancel, onSave }) {
   const fieldState = (name) => {
     if (!touched[name]) return '';
     if (fieldErrors[name]) return 'error';
-    if (RULES[name]) return 'success';
+    // Only call a field "valid" once it actually holds something. Without this
+    // an empty optional field turns green the moment Save marks everything
+    // touched — and Business Name lit up green while still showing its
+    // placeholder, purely because Full Name had been mirrored into it.
+    const v = formData[name];
+    const filled = Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '';
+    if (RULES[name] && filled) return 'success';
     return '';
   };
 
   const inputStyle = (name) => {
     const s = fieldState(name);
     return {
-      borderColor: s === 'error' ? '#DC2626' : s === 'success' ? '#16A34A' : undefined,
+      borderColor: s === 'error' ? 'var(--danger)' : s === 'success' ? '#16A34A' : undefined,
       boxShadow: s === 'error'
         ? '0 0 0 2px rgba(220,38,38,0.15)'
         : s === 'success'
@@ -213,7 +260,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
 
   const FieldError = ({ name }) =>
     touched[name] && fieldErrors[name] ? (
-      <span style={{ color: '#DC2626', fontSize: '0.78rem', marginTop: 4, display: 'block' }}>
+      <span style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 4, display: 'block' }}>
         ⚠ {fieldErrors[name]}
       </span>
     ) : null;
@@ -224,7 +271,9 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     </span>
   );
 
-  const handleSubmit = async (e) => {
+  // #13 Save is a two-step commit: validate, show the user exactly what will
+  // be written, then persist only after they confirm.
+  const handleSubmit = (e) => {
     e.preventDefault();
     setServerError('');
 
@@ -238,7 +287,6 @@ export default function ContactForm({ contact, onCancel, onSave }) {
 
     if (Object.keys(errors).length > 0) {
       setServerError('Please fix the errors highlighted below before saving.');
-      // Scroll to first error
       setTimeout(() => {
         const el = document.querySelector('.input-error-field');
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -246,13 +294,17 @@ export default function ContactForm({ contact, onCancel, onSave }) {
       return;
     }
 
-    setLoading(true);
+    setConfirming(true);
+  };
 
+  // Runs after the user confirms in the review modal.
+  const handleConfirmedSave = async () => {
+    setLoading(true);
     const payload = {
       ...formData,
       full_name: formData.full_name.trim(),
       village_town: formData.village_town.trim(),
-      business_name: formData.business_name.trim(),
+      business_name: (formData.business_name || '').trim(),
     };
 
     try {
@@ -263,10 +315,35 @@ export default function ContactForm({ contact, onCancel, onSave }) {
       }
       onSave();
     } catch (err) {
+      // Drop back to the form so the error is visible next to the fields.
+      setConfirming(false);
       setServerError(err.response?.data?.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // #12 Keyboard-first: Enter moves to the next field instead of submitting,
+  // so a whole entry can be typed without touching the mouse. Enter only
+  // submits from the last control; Ctrl/Cmd+Enter submits from anywhere.
+  // Textareas keep Enter for newlines.
+  const handleFormKeyDown = (e) => {
+    if (e.key !== 'Enter') return;
+    const el = e.target;
+    const tag = (el.tagName || '').toLowerCase();
+
+    if ((e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSubmit(e); return; }
+    if (tag === 'textarea' || el.type === 'submit' || el.type === 'button') return;
+
+    const focusables = Array.from(
+      e.currentTarget.querySelectorAll('input, select, textarea, [data-kbd-focusable]')
+    ).filter(n => !n.disabled && n.tabIndex !== -1 && n.offsetParent !== null);
+
+    const i = focusables.indexOf(el);
+    if (i === -1) return;
+    e.preventDefault();
+    if (i < focusables.length - 1) focusables[i + 1].focus();
+    else handleSubmit(e);   // last field: Enter saves
   };
 
   // Character count helpers
@@ -274,14 +351,19 @@ export default function ContactForm({ contact, onCancel, onSave }) {
   const businessLeft = 150 - (formData.business_name?.length || 0);
 
   return (
-    <div className="page-container" style={{ paddingTop: '32px' }}>
-      <form onSubmit={handleSubmit} noValidate>
-        <div className="form-header-flex">
-          <h1>{contact ? 'Edit Contact' : 'Add Contact'}</h1>
+    <div className="entry-form-inner">
+      <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} noValidate>
+        <div className="form-header-flex entry-form-head">
+          <h1>{contact ? 'Edit Entry' : 'New Entry'}</h1>
+          {onClose && (
+            <button type="button" className="entry-icon-btn" onClick={onClose} title="Close">
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         {serverError && (
-          <div style={{ padding: '12px 16px', background: '#FEE2E2', color: '#DC2626', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ padding: '12px 16px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: '1.1rem' }}>⚠</span>
             {serverError}
           </div>
@@ -310,7 +392,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
             </div>
 
             <div className="form-group">
-              <label>Full Name <span style={{ color: '#DC2626' }}>*</span></label>
+              <label>Full Name <span style={{ color: 'var(--danger)' }}>*</span></label>
               <input
                 name="full_name"
                 value={formData.full_name}
@@ -327,22 +409,6 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               )}
             </div>
 
-            <div className="form-group">
-              <label>Relation</label>
-              <CustomSelect
-                name="relation"
-                value={formData.relation}
-                onChange={handleSelectChange}
-                options={[
-                  { label: 'None', value: '' },
-                  { label: 'S/O (Son of)', value: 'S/O' },
-                  { label: 'D/O (Daughter of)', value: 'D/O' },
-                  { label: 'W/O (Wife of)', value: 'W/O' },
-                  { label: 'H/O (Husband of)', value: 'H/O' },
-                ]}
-                placeholder="Select relation"
-              />
-            </div>
 
             <div className="form-group">
               <label>
@@ -364,19 +430,6 @@ export default function ContactForm({ contact, onCancel, onSave }) {
                 style={inputStyle('business_name')}
               />
               <FieldError name="business_name" />
-            </div>
-
-            <div className="form-group">
-              <label>Age</label>
-              <input
-                name="age"
-                value={formData.age}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`input-field ${fieldState('age') === 'error' ? 'input-error-field' : ''}`}
-                placeholder="Enter Age"
-                style={inputStyle('age')}
-              />
             </div>
 
             <div className="form-group">
@@ -422,18 +475,6 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               />
             </div>
 
-            <div className="form-group">
-              <label>Product Name</label>
-              <input
-                name="product_name"
-                value={formData.product_name}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`input-field ${fieldState('product_name') === 'error' ? 'input-error-field' : ''}`}
-                placeholder="Enter Product Name"
-                style={inputStyle('product_name')}
-              />
-            </div>
 
             <div className="form-group">
               <label>Customer Occupation</label>
@@ -526,7 +567,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
             {/* VILLAGE / TOWN */}
             <div className="form-group">
               <label>
-                Village / Town <span style={{ color: '#DC2626' }}>*</span>
+                Village / Town <span style={{ color: 'var(--danger)' }}>*</span>
               </label>
               {locLoading ? (
                 <input className="input-field" disabled placeholder="Loading…" />
@@ -629,7 +670,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label>Products <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400 }}>(select all that apply)</span></label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
-                {PRODUCT_OPTIONS.map(p => {
+                {productCatalogue.map(p => {
                   const checked = formData.products.includes(p);
                   return (
                     <label
@@ -653,7 +694,46 @@ export default function ContactForm({ contact, onCancel, onSave }) {
                     </label>
                   );
                 })}
+
+                {/* Inline add — admins can create a product without opening
+                    Settings. Shows as a "+ Add" pill until clicked. */}
+                {canAddProduct && !showAddProduct && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddProduct(true); setAddProductErr(''); }}
+                    className="product-add-pill"
+                    title="Add a new product"
+                  >
+                    <Plus size={14} /> Add
+                  </button>
+                )}
+                {canAddProduct && showAddProduct && (
+                  <span className="product-add-inline">
+                    <input
+                      autoFocus
+                      value={newProductName}
+                      maxLength={60}
+                      placeholder="New product"
+                      onChange={(e) => setNewProductName(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Enter adds; Esc cancels. stopPropagation so the form's
+                        // Enter-advances-field handler doesn't also fire.
+                        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submitNewProduct(); }
+                        if (e.key === 'Escape') { e.preventDefault(); setShowAddProduct(false); setNewProductName(''); setAddProductErr(''); }
+                      }}
+                    />
+                    <button type="button" className="entry-icon-btn" onClick={submitNewProduct} disabled={addingProduct || !newProductName.trim()} title="Add">
+                      <Plus size={16} />
+                    </button>
+                    <button type="button" className="entry-icon-btn" onClick={() => { setShowAddProduct(false); setNewProductName(''); setAddProductErr(''); }} title="Cancel">
+                      <X size={16} />
+                    </button>
+                  </span>
+                )}
               </div>
+              {addProductErr && (
+                <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 6 }}>{addProductErr}</div>
+              )}
             </div>
           </div>
         </div>
@@ -663,7 +743,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
           <div className="form-section-title">CONTACT</div>
           <div className="form-grid">
             <div className="form-group">
-              <label>Phone 1 <span style={{ color: '#DC2626' }}>*</span></label>
+              <label>Phone 1 <span style={{ color: 'var(--danger)' }}>*</span></label>
               <input
                 name="phone_1"
                 value={formData.phone_1}
@@ -720,7 +800,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               <label>
                 Notes
                 {formData.notes.length > 0 && (
-                  <span style={{ float: 'right', fontSize: '0.75rem', color: notesLeft < 50 ? '#DC2626' : 'var(--text-muted)', fontWeight: 400 }}>
+                  <span style={{ float: 'right', fontSize: '0.75rem', color: notesLeft < 50 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 400 }}>
                     {notesLeft} / 500 remaining
                   </span>
                 )}
@@ -744,10 +824,19 @@ export default function ContactForm({ contact, onCancel, onSave }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 8, marginBottom: 8 }}>
           <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Saving...' : 'Save Contact'}
+            {loading ? 'Saving…' : 'Save Entry'}
           </button>
         </div>
       </form>
+
+      <ConfirmEntryModal
+        isOpen={confirming}
+        data={formData}
+        isEdit={!!(contact && contact._id)}
+        saving={loading}
+        onConfirm={handleConfirmedSave}
+        onEdit={() => setConfirming(false)}
+      />
     </div>
   );
 }

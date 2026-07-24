@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Calendar as CalendarIcon, Check, ChevronDown } from 'lucide-react';
 import Calendar from './Calendar';
+import { parseDateInput } from '../utils/parseDateInput';
 
 // Local 'YYYY-MM-DD' — toISOString() would shift the day for anyone east or
 // west of UTC, which silently moves the range boundary by a day.
@@ -44,6 +45,10 @@ export default function DateRangeFilter({ value, onChange }) {
   // Draft custom dates, so a half-typed range doesn't refetch on every keystroke.
   const [draft, setDraft] = useState({ from: value.from || '', to: value.to || '' });
   const [err, setErr] = useState('');
+  // Raw text of the two boxes, kept separate from the parsed draft so a
+  // half-typed value isn't destroyed on every keystroke.
+  const [typed, setTyped] = useState({ from: '', to: '' });
+  const [focusSide, setFocusSide] = useState(null);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -54,7 +59,38 @@ export default function DateRangeFilter({ value, onChange }) {
     return () => { document.removeEventListener('mousedown', h); document.removeEventListener('keydown', k); };
   }, []);
 
-  useEffect(() => { setDraft({ from: value.from || '', to: value.to || '' }); }, [value.from, value.to]);
+  useEffect(() => {
+    setDraft({ from: value.from || '', to: value.to || '' });
+    setTyped({ from: value.from ? fmt(value.from) : '', to: value.to ? fmt(value.to) : '' });
+  }, [value.from, value.to]);
+
+  // Clicking the calendar must write back into the text boxes, or the two
+  // halves of the control disagree about what is selected.
+  const setFromCalendar = (r) => {
+    setErr('');
+    setDraft({ from: r.from || '', to: r.to || '' });
+    setTyped({ from: r.from ? fmt(r.from) : '', to: r.to ? fmt(r.to) : '' });
+  };
+
+  // Parse one box on blur/Enter. `to` widens partial input to the end of the
+  // period, so "2026" means 31 Dec 2026 rather than 1 Jan.
+  const commitTyped = (side) => {
+    setFocusSide(null);
+    const raw = typed[side];
+    if (!raw.trim()) {
+      setDraft(d => ({ ...d, [side]: '' }));
+      setErr('');
+      return;
+    }
+    const parsed = parseDateInput(raw, side === 'to');
+    if (!parsed) {
+      setErr(`Could not read “${raw}”. Try 2022, 03/2022 or 15/03/2022.`);
+      return;
+    }
+    setErr('');
+    setDraft(d => ({ ...d, [side]: parsed }));
+    setTyped(t => ({ ...t, [side]: fmt(parsed) }));   // echo back canonical form
+  };
 
   const pick = (p) => {
     setErr('');
@@ -68,6 +104,7 @@ export default function DateRangeFilter({ value, onChange }) {
   // the fields sat empty.
   const clearToAllTime = () => {
     setDraft({ from: '', to: '' });
+    setTyped({ from: '', to: '' });
     setErr('');
     onChange({ preset: 'all', from: null, to: null });
     setOpen(false);
@@ -85,9 +122,12 @@ export default function DateRangeFilter({ value, onChange }) {
   };
 
   const current = PRESETS.find(p => p.id === value.preset);
+  // Single-sided ranges read as open-ended: a From alone runs to today, a To
+  // alone runs from the first record. The backend already treats a missing
+  // bound that way; these labels just make it obvious on the button.
   const label = value.preset === 'custom'
     ? (value.from && value.to ? `${fmt(value.from)} – ${fmt(value.to)}`
-      : value.from ? `From ${fmt(value.from)}` : `Until ${fmt(value.to)}`)
+      : value.from ? `${fmt(value.from)} → Today` : `Up to ${fmt(value.to)}`)
     : (current?.label || 'All time');
 
   return (
@@ -130,23 +170,46 @@ export default function DateRangeFilter({ value, onChange }) {
             <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', color: 'var(--text-muted)', marginBottom: 8 }}>
               Custom range
             </div>
-            {/* Readout of the current draft — the calendar is the input, these
-                are feedback, so a half-picked range reads clearly. */}
+            {/* Typeable as well as clickable: entering 2022 and 2026 covers
+                those years end to end, which beats paging a calendar back
+                four years. Kept in sync with the grid below. */}
             <div className="cal-readout">
-              <div className={`cal-readout-slot ${draft.from && !draft.to ? 'is-active' : ''}`}>
+              <label className={`cal-readout-slot ${focusSide === 'from' ? 'is-active' : ''}`}>
                 <span>From</span>
-                <strong>{draft.from ? fmt(draft.from) : '—'}</strong>
-              </div>
+                <input
+                  className="cal-readout-input"
+                  value={typed.from}
+                  placeholder="2022 or 15/03/2022"
+                  onFocus={() => setFocusSide('from')}
+                  onBlur={() => commitTyped('from')}
+                  onChange={(e) => setTyped(t => ({ ...t, from: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitTyped('from'); } }}
+                  aria-label="From date"
+                />
+              </label>
               <span className="cal-readout-sep">–</span>
-              <div className={`cal-readout-slot ${draft.from && !draft.to ? 'is-next' : ''}`}>
+              <label className={`cal-readout-slot ${focusSide === 'to' ? 'is-active' : ''}`}>
                 <span>To</span>
-                <strong>{draft.to ? fmt(draft.to) : '—'}</strong>
-              </div>
+                <input
+                  className="cal-readout-input"
+                  value={typed.to}
+                  placeholder="2026 or 31/12/2026"
+                  onFocus={() => setFocusSide('to')}
+                  onBlur={() => commitTyped('to')}
+                  onChange={(e) => setTyped(t => ({ ...t, to: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitTyped('to'); } }}
+                  aria-label="To date"
+                />
+              </label>
             </div>
+            <p className="cal-hint">
+              Fill just <strong>From</strong> to see that date until today, or just <strong>To</strong> for everything up to it.
+              Type a year (2022), a month (03/2022) or a full date — or pick below.
+            </p>
 
             <Calendar
               value={{ from: draft.from || null, to: draft.to || null }}
-              onChange={(r) => { setErr(''); setDraft({ from: r.from || '', to: r.to || '' }); }}
+              onChange={setFromCalendar}
             />
 
             {err && <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 8 }}>{err}</div>}

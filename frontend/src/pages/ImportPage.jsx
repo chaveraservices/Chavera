@@ -174,7 +174,7 @@ export default function ImportPage({ onComplete }) {
         <div style={{
           display: 'flex', alignItems: 'center', gap: '10px',
           padding: '14px 18px', background: '#FEF2F2',
-          border: '1px solid #FECACA', color: '#DC2626',
+          border: '1px solid #FECACA', color: 'var(--danger)',
           borderRadius: '10px', marginBottom: '20px', fontSize: '0.9rem', fontWeight: 500,
         }}>
           <XCircle size={18} style={{ flexShrink: 0 }} />
@@ -256,11 +256,11 @@ export default function ImportPage({ onComplete }) {
             />
             <div style={{
               width: '72px', height: '72px', borderRadius: '50%',
-              background: isDragOver ? 'rgba(226,92,36,0.15)' : '#F1F5F9',
+              background: isDragOver ? 'rgba(226,92,36,0.15)' : '#232322',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               marginBottom: '20px', transition: 'background 0.25s',
             }}>
-              <UploadCloud size={32} color={isDragOver ? 'var(--primary-accent)' : '#94A3B8'} />
+              <UploadCloud size={32} color={isDragOver ? 'var(--primary-accent)' : 'var(--text-muted)'} />
             </div>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-dark)', marginBottom: '8px' }}>
               {isDragOver ? 'Release to upload' : 'Drag & drop your file here'}
@@ -273,7 +273,7 @@ export default function ImportPage({ onComplete }) {
             }}>
               {['.xlsx', '.xls', '.csv'].map(ext => (
                 <span key={ext} style={{
-                  padding: '4px 12px', background: '#F1F5F9',
+                  padding: '4px 12px', background: '#232322',
                   borderRadius: '999px', fontSize: '0.8rem',
                   color: 'var(--text-muted)', fontWeight: 600,
                 }}>
@@ -286,7 +286,7 @@ export default function ImportPage({ onComplete }) {
           {/* ── Required fields note ── */}
           <div style={{
             marginTop: '16px', padding: '12px 18px',
-            background: '#FFFBEB', border: '1px solid #FDE68A',
+            background: '#332A12', border: '1px solid #FDE68A',
             borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px',
             fontSize: '0.85rem', color: '#92400E',
           }}>
@@ -342,9 +342,9 @@ export default function ImportPage({ onComplete }) {
             gap: '14px', marginBottom: '20px',
           }}>
             {[
-              { label: 'Total Rows', value: previewData.length, color: '#1A365D', bg: '#EEF2FF', icon: <Copy size={16} color="#4338CA" /> },
+              { label: 'Total Rows', value: previewData.length, color: 'var(--text-dark)', bg: '#1B1F33', icon: <Copy size={16} color="#4338CA" /> },
               { label: 'Will Import', value: validCount, color: '#15803D', bg: '#F0FDF4', icon: <CheckCircle2 size={16} color="#16A34A" /> },
-              { label: 'Invalid / Missing', value: skippedCount, color: '#DC2626', bg: '#FEF2F2', icon: <XCircle size={16} color="#DC2626" /> },
+              { label: 'Invalid / Missing', value: skippedCount, color: 'var(--danger)', bg: '#FEF2F2', icon: <XCircle size={16} color="var(--danger)" /> },
               { label: 'Duplicates', value: stats.Duplicate || 0, color: '#1D4ED8', bg: '#EFF6FF', icon: <AlertTriangle size={16} color="#3B82F6" /> },
             ].map(({ label, value, color, bg, icon }) => (
               <div key={label} style={{
@@ -376,9 +376,9 @@ export default function ImportPage({ onComplete }) {
           }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginRight: '4px' }}>ROW COLOURS:</span>
             {[
-              { cls: 'dot-invalid', label: 'Invalid phone', color: '#DC2626' },
+              { cls: 'dot-invalid', label: 'Invalid phone', color: 'var(--danger)' },
               { cls: 'dot-duplicate', label: 'Duplicate phone', color: '#2563EB' },
-              { cls: 'dot-missing', label: 'Missing required field', color: '#94A3B8' },
+              { cls: 'dot-missing', label: 'Missing required field', color: 'var(--text-muted)' },
             ].map(({ cls, label, color }) => (
               <span key={cls} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                 <span className={`legend-dot ${cls}`} />

@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import api from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -71,6 +72,31 @@ export function AuthProvider({ children }) {
     setToken(null);
     setUser(null);
   }, []);
+
+  // Reconcile the cached user with the server on load. The cached copy is a
+  // snapshot from login time, so a name changed directly in the DB — or a role
+  // changed by an admin — would otherwise stay wrong until the next login.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api.post('/user/me')
+      .then(res => {
+        if (cancelled || !res.data?.success) return;
+        const fresh = res.data.data;
+        setUser(prev => {
+          // Only write if something actually changed, to avoid a needless render.
+          if (prev && prev.name === fresh.name && prev.email === fresh.email && prev.role === fresh.role) {
+            return prev;
+          }
+          localStorage.setItem('user', JSON.stringify(fresh));
+          return fresh;
+        });
+      })
+      // A 401/403 is already handled by the api interceptor (auto-logout);
+      // any other failure just leaves the cached copy in place.
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
 
   const value = {
     user,

@@ -273,7 +273,7 @@ export default function CitiesPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 gap: 10, transition: 'border-color 0.15s, box-shadow 0.15s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#5A5A57'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.5)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
@@ -303,11 +303,11 @@ export default function CitiesPage() {
                 onClick={() => triggerDeleteCity(item.state, item.district, item.city)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  padding: 4, color: '#CBD5E1', display: 'flex', alignItems: 'center',
+                  padding: 4, color: '#5A5A57', display: 'flex', alignItems: 'center',
                   flexShrink: 0, transition: 'color 0.15s', borderRadius: 6,
                 }}
-                onMouseEnter={e => e.currentTarget.style.color = '#DC2626'}
-                onMouseLeave={e => e.currentTarget.style.color = '#CBD5E1'}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
+                onMouseLeave={e => e.currentTarget.style.color = '#5A5A57'}
                 title="Delete City"
               >
                 <Trash2 size={14} />
@@ -406,7 +406,7 @@ export default function CitiesPage() {
                 <div style={{
                   padding: '10px 14px', background: '#FEF2F2',
                   border: '1px solid #FECACA', borderRadius: 8,
-                  color: '#DC2626', fontSize: '0.84rem', fontWeight: 500,
+                  color: 'var(--danger)', fontSize: '0.84rem', fontWeight: 500,
                 }}>
                   {cityError}
                 </div>

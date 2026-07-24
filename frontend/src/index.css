@@ -1,28 +1,48 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* Dark theme — deep orange on black.
+   Variable NAMES are kept from the light theme (--bg-white, --text-dark) so
+   every existing component keeps working; only the values changed. The names
+   now read as roles, not literal colours: --bg-white is "card surface" and
+   --text-dark is "primary ink".
+   Contrast checked against the surfaces below: body text 15.97:1, muted text
+   6.74:1, accent text 6.14:1 — all clear WCAG AA. */
 :root {
-  --bg-main: #F8FAFC;
-  --bg-sidebar: #FFFFFF;
-  --bg-table-header: #E8EEF5;
-  --bg-white: #FFFFFF;
-  
+  color-scheme: dark;
+
+  --bg-main: #0D0D0D;          /* page plane */
+  --bg-sidebar: #141413;       /* navbar */
+  --bg-table-header: #1F1F1E;
+  --bg-white: #1A1A19;         /* card / surface */
+
+  /* Brand orange for fills. Buttons pair it with white at 3.63:1, so the
+     button style below darkens it to #C54C1A (4.75:1) behind white text. */
   --primary-accent: #E25C24;
-  --primary-accent-hover: #C54C1A;
-  --highlight: #FCEEE9;
-  
-  --text-dark: #1A365D; /* Navy */
-  --text-table-header: #2C5282;
-  --text-muted: #64748B;
-  
-  --border-color: #E2E8F0;
-  --danger: #DC2626;
-  --danger-hover: #B91C1C;
-  
-  --badge-dealer-bg: #E0F2FE;
-  --badge-dealer-text: #0369A1;
-  --badge-customer-bg: #F3E8FF;
-  --badge-customer-text: #7E22CE;
+  --primary-accent-hover: #F2762F;
+  --accent-text: #F2762F;      /* accent as TEXT on dark — 6.14:1 */
+  --accent-fill: #C54C1A;      /* accent behind white text — 4.75:1 */
+  --highlight: #2A1710;        /* tinted selection wash */
+
+  --text-dark: #F5F5F4;        /* primary ink */
+  --text-table-header: #C9C8C3;
+  --text-muted: #A1A1A0;
+
+  --border-color: #2C2C2A;
+  --danger: #F87171;
+  --danger-hover: #FCA5A5;
+
+  --badge-dealer-bg: #10263A;
+  --badge-dealer-text: #7DC5F0;
+  --badge-customer-bg: #2A1B3D;
+  --badge-customer-text: #C9A2F0;
 }
+
+/* Dark scrollbars — the default light ones cut hard against black. */
+* { scrollbar-color: #3A3A38 transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #3A3A38; border-radius: 6px; }
+*::-webkit-scrollbar-thumb:hover { background: #4A4A47; }
 
 * {
   box-sizing: border-box;
@@ -37,68 +57,140 @@ body {
   min-height: 100vh;
 }
 
-/* Layout */
-.app-layout {
+/* Layout — top navbar shell (replaced the left sidebar) */
+.app-shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
 
-.sidebar {
-  width: 250px;
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-header {
-  padding: 24px;
-  border-bottom: 1px solid var(--border-color);
-}
-.sidebar-header h2 {
-  color: var(--text-dark);
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.sidebar-logo {
-  height: 52px;
-  width: auto;
-  max-width: 100%;
-  display: block;
-  margin-bottom: 8px;
-}
-.sidebar-header p {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.sidebar-nav {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.nav-item {
+.navbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 999px; /* Pill shape */
-  color: var(--text-muted);
-  font-weight: 500;
+  gap: 24px;
+  height: 60px;
+  flex-shrink: 0;
+  padding: 0 20px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-color);
+}
+.navbar-brand {
+  display: flex;
+  align-items: center;
   cursor: pointer;
-  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.navbar-logo {
+  height: 30px;
+  width: auto;
+  display: block;
+}
+.navbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 .nav-item.active {
   background-color: var(--highlight);
-  color: var(--primary-accent);
+  color: var(--accent-text);
+  font-weight: 600;
 }
 .nav-item:hover:not(.active) {
-  background-color: var(--bg-main);
+  background-color: #232322;
+  color: var(--text-dark);
+}
+
+/* User menu */
+.navbar-user { position: relative; flex-shrink: 0; }
+.navbar-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dark);
+  font-family: inherit;
+  cursor: pointer;
+}
+.navbar-user-btn:hover { background: #232322; }
+.navbar-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.navbar-user-meta { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.navbar-user-name { font-size: 0.82rem; font-weight: 600; color: var(--text-dark); }
+.navbar-user-role { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.navbar-user-email { font-size: 0.75rem; color: var(--text-muted); }
+
+.navbar-menu-scrim { position: fixed; inset: 0; z-index: 90; }
+.navbar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  /* User block now sits on the LEFT of the navbar, so the menu opens
+     leftward — anchored right would push it off-screen. */
+  left: 0;
+  z-index: 91;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.55);
+}
+.navbar-menu-head { padding: 10px 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; }
+.navbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dark);
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+.navbar-menu-item:hover { background: #232322; }
+.navbar-menu-item.is-danger { color: var(--danger); }
+
+@media (max-width: 720px) {
+  .navbar { gap: 12px; padding: 0 12px; }
+  .navbar-user-meta { display: none; }
+  .nav-item span { display: none; }
+  .nav-item { padding: 8px 10px; }
 }
 
 .main-content {
@@ -154,11 +246,13 @@ body {
   transition: all 0.2s;
 }
 .btn-primary {
-  background-color: var(--primary-accent);
-  color: white;
+  /* --accent-fill, not --primary-accent: white text on the brand orange is
+     only 3.63:1, while the darker fill clears AA at 4.75:1. */
+  background-color: var(--accent-fill);
+  color: #FFFFFF;
 }
 .btn-primary:hover {
-  background-color: var(--primary-accent-hover);
+  background-color: var(--primary-accent);
 }
 .btn-link {
   background: transparent;
@@ -328,18 +422,20 @@ body {
   border-color: var(--primary-accent);
 }
 .input-field::placeholder {
-  color: #CBD5E1;
+  color: #6B6B68;
 }
 
 /* Modal */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
+  padding: 16px;
+  overscroll-behavior: contain;
   backdrop-filter: blur(2px);
 }
 .modal-content {
@@ -350,7 +446,7 @@ body {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.55);
 }
 .modal-header {
   padding: 20px 24px;
@@ -389,7 +485,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: white;
+  background: var(--bg-white);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   font-size: 0.9rem;
@@ -403,7 +499,7 @@ body {
   outline: none;
 }
 .custom-select-trigger.disabled {
-  background: #F1F5F9;
+  background: #232322;
   cursor: not-allowed;
   opacity: 0.7;
 }
@@ -415,7 +511,7 @@ body {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: white;
+  background: var(--bg-white);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
@@ -435,7 +531,7 @@ body {
   justify-content: space-between;
 }
 .custom-select-option:hover {
-  background: #F8FAFC;
+  background: var(--bg-main);
 }
 .custom-select-option.selected {
   background: #EFF6FF;
@@ -454,12 +550,17 @@ body {
 }
 
 .shimmer-block {
-  background: #f6f7f8;
-  background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
+  /* Dark skeleton: a subtle sheen over the card surface. The old light-grey
+     gradient flashed near-white against the dark theme on every load. */
+  background: #232322;
+  background-image: linear-gradient(to right, #232322 0%, #2E2E2C 20%, #232322 40%, #232322 100%);
   background-repeat: no-repeat;
   background-size: 1000px 100%;
   animation: shimmer 2s infinite linear forwards;
   border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-block { animation: none; }
 }
 
 /* Custom Select Dropdown */
@@ -489,10 +590,10 @@ body {
   box-shadow: 0 0 0 2px rgba(226, 92, 36, 0.1);
 }
 .custom-select-trigger:hover:not(.disabled) {
-  border-color: #CBD5E1;
+  border-color: #6B6B68;
 }
 .custom-select-container.disabled .custom-select-trigger {
-  background: #F8FAFC;
+  background: var(--bg-main);
   cursor: not-allowed;
   opacity: 0.7;
   color: #94A3B8;
@@ -545,7 +646,7 @@ body {
   border-bottom-right-radius: 8px;
 }
 .custom-select-option:hover {
-  background: #F8FAFC;
+  background: var(--bg-main);
 }
 .custom-select-option.selected {
   background: var(--highlight);
@@ -600,7 +701,7 @@ body {
   padding: 20px;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 .loc-card:hover {
   border-color: var(--primary-accent);
@@ -608,7 +709,7 @@ body {
 
 /* Small count pill (e.g. "3 Districts") */
 .stat-pill {
-  background: #F1F5F9;
+  background: #232322;
   padding: 4px 10px;
   border-radius: 999px;
 }
@@ -721,7 +822,7 @@ body {
   text-overflow: ellipsis;
 }
 .bar-track {
-  background: #F1F5F9;
+  background: #232322;
   border-radius: 999px;
   height: 12px;
   overflow: hidden;
@@ -740,15 +841,49 @@ body {
 }
 
 /* Filter panel (opened by the Filters button) */
+/* Zero-height anchor: the panel floats out of it, so opening and closing the
+   filters never moves the table below. */
+.filter-host {
+  position: relative;
+  height: 0;
+  z-index: 60;
+}
 .filter-panel {
+  position: absolute;
+  top: 0;
+  /* Anchored under the Filters button rather than spanning the page, so it
+     covers as few rows as possible. 3x3 for the nine filters. */
+  right: 32px;
+  left: auto;
+  width: 620px;
+  max-width: calc(100vw - 40px);
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 16px 18px;
-  margin-top: 16px;
-  padding: 20px;
-  background: var(--bg-main);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 16px;
+  padding: 18px;
+  background: var(--bg-white);
   border: 1px solid var(--border-color);
   border-radius: 12px;
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.75);
+  animation: filter-drop 0.14s ease-out;
+}
+@keyframes filter-drop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .filter-panel { animation: none; }
+}
+@media (max-width: 900px) {
+  .filter-panel {
+    right: 20px;
+    left: 20px;
+    width: auto;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 520px) {
+  .filter-panel { grid-template-columns: 1fr; }
 }
 .filter-field label {
   display: block;
@@ -775,156 +910,13 @@ body {
 }
 
 /* Column manager panel */
-.columns-panel {
-  margin-top: 16px;
-  padding: 14px 16px;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  max-width: 380px;
-}
-/* Column-manager button in the table header */
-.col-mgr-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-white);
-  cursor: pointer;
-  color: var(--text-muted);
-}
-.col-mgr-btn:hover { border-color: var(--primary-accent); color: var(--primary-accent); }
 /* Popover variant of the column panel, anchored under the header button */
 /* Portalled onto <body> and anchored in viewport coords by ColumnManager, so
    the table's overflow-x container can't clip it. Offsets come from JS. */
-.columns-panel-pop {
-  position: fixed;
-  z-index: 200;
-  margin-top: 0;
-  width: 290px;
-  max-width: none;
-  text-transform: none;
-  font-weight: 400;
-  letter-spacing: normal;
-  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.25);
-  /* header stays put, the column list scrolls */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.columns-panel-pop .columns-list {
-  overflow-y: auto;
-  min-height: 0;
-  /* the panel's JS-computed maxHeight governs; don't double-cap here */
-  max-height: none;
-}
-.columns-panel-header {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-muted);
-  margin-bottom: 10px;
-}
-.columns-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 340px;
-  overflow-y: auto;
-}
-.col-manage-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  color: var(--text-dark);
-  background: var(--bg-white);
-}
-.col-manage-row:hover { background: #F8FAFC; }
-.col-grip {
-  display: flex;
-  align-items: center;
-  color: #94A3B8;
-  cursor: grab;
-}
-.col-grip:active { cursor: grabbing; }
 
 /* Toggle switch */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 38px;
-  height: 22px;
-  flex-shrink: 0;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.switch-slider {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  background: #CBD5E1;
-  border-radius: 999px;
-  transition: background 0.2s;
-}
-.switch-slider::before {
-  content: '';
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform 0.2s;
-}
-.switch input:checked + .switch-slider { background: var(--primary-accent); }
-.switch input:checked + .switch-slider::before { transform: translateX(16px); }
 
 /* Per-column header filter dropdown */
-.col-filter-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  z-index: 60;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  padding: 8px;
-  width: 220px;
-  text-transform: none;
-  font-weight: 400;
-  letter-spacing: normal;
-}
-.col-filter-opt {
-  padding: 7px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--text-dark);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.col-filter-opt:hover { background: #F1F5F9; }
-.col-filter-opt.selected { background: var(--highlight); color: var(--primary-accent); font-weight: 600; }
-.col-filter-clear {
-  width: 100%;
-  margin-top: 6px;
-  padding: 6px;
-  border: none;
-  background: none;
-  color: var(--danger);
-  font-size: 0.82rem;
-  cursor: pointer;
-  font-family: inherit;
-}
-.col-filter-clear:hover { text-decoration: underline; }
 
 /* Bare icon button that turns danger-red on hover */
 .icon-delete-btn {
@@ -932,7 +924,7 @@ body {
   border: none;
   cursor: pointer;
   padding: 4px;
-  color: #CBD5E1;
+  color: #6B6B68;
   display: flex;
   align-items: center;
   transition: color 0.15s;
@@ -947,8 +939,8 @@ body {
   100% { background-position:  1000px 0; }
 }
 .shimmer-block {
-  background: #f6f7f8;
-  background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
+  background: #232322;
+  background-image: linear-gradient(to right, #232322 0%, #2E2E2C 20%, #232322 40%, #232322 100%);
   background-repeat: no-repeat;
   background-size: 1000px 100%;
   animation: shimmer 2s infinite linear;
@@ -961,8 +953,8 @@ body {
 .input-field.input-error-field,
 input.input-error-field,
 textarea.input-error-field {
-  border-color: #DC2626 !important;
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15) !important;
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2) !important;
 }
 
 /* ── Import Page Styles ──────────────────────── */
@@ -1005,7 +997,7 @@ textarea.input-error-field {
 .badge-valid    { background-color: #DCFCE7; color: #15803D; }
 .badge-invalid  { background-color: #FEE2E2; color: #DC2626; }
 .badge-duplicate{ background-color: #DBEAFE; color: #2563EB; }
-.badge-missing  { background-color: #F1F5F9; color: #475569; }
+.badge-missing  { background-color: #232322; color: #475569; }
 
 /* Legend dots */
 .legend-dot {
@@ -1135,7 +1127,7 @@ textarea.input-error-field {
   transition: background 0.12s, color 0.12s;
 }
 .cal-day:hover { background: var(--border-color); }
-.cal-day.is-outside { color: #CBD5E1; }
+.cal-day.is-outside { color: #6B6B68; }
 .cal-day.is-today {
   font-weight: 700;
   color: var(--primary-accent);
@@ -1205,3 +1197,624 @@ textarea.input-error-field {
 }
 .cal-readout-sep { color: var(--text-muted); flex-shrink: 0; }
 
+
+/* ---- Entry table: five fixed columns, whole row opens the detail modal --- */
+.row-clickable { cursor: pointer; transition: background 0.12s; }
+.row-clickable:hover { background: #232322; }
+.row-clickable:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -2px;
+}
+.th-id, .td-id { width: 72px; }
+.cell-id {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+/* Accent rail on hover — echoes the reference screenshots */
+.row-clickable td:first-child { box-shadow: inset 2px 0 0 transparent; }
+.row-clickable:hover td:first-child { box-shadow: inset 2px 0 0 var(--primary-accent); }
+
+/* ---- Entry detail modal ------------------------------------------------- */
+.entry-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
+}
+.entry-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #2A1710 0%, #1F1310 100%);
+  border-bottom: 1px solid var(--border-color);
+}
+.entry-avatar {
+  width: 44px; height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--accent-fill);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.entry-modal-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-modal-sub { display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+.entry-chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #33241C;
+  color: var(--accent-text);
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.entry-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.entry-icon-btn:hover { background: #ffffff14; color: var(--text-dark); }
+
+/* The one scrolling region in the modal. */
+.entry-modal-body {
+  padding: 6px 20px 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Stop the page behind from taking over the scroll once this list hits its
+     end — the lurch that made modal scrolling feel broken. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;   /* momentum on iOS */
+  scroll-behavior: smooth;
+  /* Reserve the gutter so content doesn't shift when the bar appears. */
+  scrollbar-gutter: stable;
+}
+/* Slimmer, lower-contrast bar inside the modal than the app-wide one. */
+.entry-modal-body::-webkit-scrollbar { width: 8px; }
+.entry-modal-body::-webkit-scrollbar-thumb {
+  background: #38383571;
+  border-radius: 8px;
+}
+.entry-modal-body::-webkit-scrollbar-thumb:hover { background: #4A4A47; }
+
+/* Someone who has asked for reduced motion should not get smooth-scroll. */
+@media (prefers-reduced-motion: reduce) {
+  .entry-modal-body { scroll-behavior: auto; }
+}
+.entry-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.entry-row:last-child { border-bottom: none; }
+.entry-row-label {
+  flex-shrink: 0;
+  width: 132px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--text-muted);
+}
+.entry-row-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  color: var(--text-dark);
+  text-align: right;
+  word-break: break-word;
+}
+.entry-row-value.is-accent { color: var(--accent-text); font-weight: 600; }
+.entry-row-value.is-empty { color: #5A5A57; }
+
+.entry-modal-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-color);
+  background: #151514;
+}
+.entry-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.entry-action:hover { background: #232322; color: var(--text-dark); }
+.entry-action.is-primary { border-color: var(--primary-accent); color: var(--accent-text); }
+.entry-action.is-primary:hover { background: var(--highlight); }
+.entry-action.is-danger:hover { color: var(--danger); border-color: var(--danger); }
+
+/* ---- Dark-theme legibility fixes ---------------------------------------- */
+/* Browsers grey out disabled text by default, which on a dark surface drops
+   it to near-invisible. Keep it readable but clearly inert. */
+.input-field:disabled,
+input:disabled,
+textarea:disabled {
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);  /* Safari/Chrome override */
+  opacity: 1;
+}
+
+/* Search inputs sit inside .search-bar, which owns the surface. */
+.search-bar { color: var(--text-dark); }
+.search-bar input { color: var(--text-dark); }
+.search-bar input::placeholder { color: #6B6B68; }
+
+/* Spell-check squiggles are near-invisible on black; browsers can't restyle
+   them, so turn the noise off in the search box specifically. */
+.search-bar input { text-decoration: none; }
+
+select, option {
+  background-color: var(--bg-white);
+  color: var(--text-dark);
+}
+
+/* Native date/number spinners and pickers render black-on-black otherwise. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.85); }
+
+/* Keyboard-highlighted option in a dropdown (arrow-key navigation). */
+.custom-select-option.active {
+  background: var(--highlight);
+  color: var(--accent-text);
+}
+.custom-select-trigger:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
+}
+
+/* ---- Modal scroll lock -------------------------------------------------- */
+/* Set by useBodyScrollLock while any modal is open. The app scrolls inside
+   .main-content (the shell is height:100vh/overflow:hidden), so that is the
+   element that actually has to be frozen — locking <body> alone does nothing. */
+html.modal-open body { overflow: hidden; }
+html.modal-open .main-content {
+  overflow: hidden !important;
+  padding-right: var(--scrollbar-compensation, 0px);
+}
+
+/* ---- Entry page toolbar: title, search and actions on one line ---------- */
+.entry-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 32px 16px;
+  flex-wrap: wrap;
+}
+.entry-toolbar-title { flex-shrink: 0; }
+.entry-toolbar-title h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  line-height: 1.2;
+}
+.entry-toolbar-title p {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+/* Search takes the slack so the actions stay pinned right. */
+.entry-toolbar-search {
+  margin: 0;
+  flex: 1 1 220px;
+  min-width: 180px;
+  width: auto;
+}
+.entry-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Narrow screens: let the title own a row, keep the rest together. */
+@media (max-width: 900px) {
+  .entry-toolbar { padding: 16px 20px 12px; gap: 12px; }
+  .entry-toolbar-title { flex-basis: 100%; }
+  .entry-toolbar-search { flex-basis: 100%; }
+}
+
+/* ---- Settings: user access & roles -------------------------------------- */
+.access-add-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px 16px;
+  padding: 18px;
+  margin: 14px 0 18px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.access-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.access-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.access-avatar {
+  width: 34px; height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #232322;
+  color: var(--text-muted);
+}
+.access-avatar.is-admin { background: var(--highlight); color: var(--accent-text); }
+.access-name {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.92rem; font-weight: 600; color: var(--text-dark);
+}
+.access-you {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--highlight);
+  color: var(--accent-text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.access-email {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.access-role-select { width: 140px; flex-shrink: 0; }
+
+.access-legend {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.access-legend strong { color: var(--text-dark); }
+
+@media (max-width: 620px) {
+  .access-row { flex-wrap: wrap; }
+  .access-role-select { width: 100%; order: 3; }
+}
+
+/* ---- Product-mix donut: overview / focus controls ------------------------ */
+.donut-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.donut-picker { width: 260px; max-width: 100%; }
+.donut-focus-note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-bottom: 12px;
+}
+.donut-focus-note strong { color: var(--accent-text); }
+
+.donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Bounded, not flex:1 — stretching to the full card width pushed the count
+     and share so far from the product name they read as unrelated columns. */
+  width: 340px;
+  max-width: 100%;
+  flex: 0 1 340px;
+  /* A long product list in focus mode scrolls rather than stretching the card. */
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+.donut-legend::-webkit-scrollbar { width: 8px; }
+.donut-legend::-webkit-scrollbar-thumb { background: #38383571; border-radius: 8px; }
+
+.donut-other-note {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+/* Segmented control for the Product Mix views. */
+.view-switch {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+}
+.view-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.view-switch-btn:hover:not(.active) { color: var(--text-dark); }
+.view-switch-btn.active { background: var(--highlight); color: var(--accent-text); }
+
+/* Ranked-bar view inside the Product Mix card. */
+.donut-bars { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.donut-bars .bar-pct {
+  width: 52px;
+  text-align: right;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .view-switch-btn span { display: none; }
+  .view-switch-btn { padding: 6px 9px; }
+}
+
+/* Stat card: "field never filled in" reads differently from a real zero. */
+.stat-empty-note {
+  font-size: 0.68rem;
+  color: #6B6B65;
+  margin-top: 3px;
+  line-height: 1.35;
+  max-width: 210px;
+}
+
+/* Typeable From/To boxes above the calendar grid. */
+.cal-readout-slot { cursor: text; }
+.cal-readout-input {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  font-variant-numeric: tabular-nums;
+}
+.cal-readout-input::placeholder { color: #5A5A57; font-weight: 400; }
+.cal-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin: -4px 0 10px;
+  line-height: 1.4;
+}
+
+/* ---- Settings tabs ------------------------------------------------------ */
+/* The page was one long scroll; tabs put every section one click away. */
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 20px;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.settings-tab {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.settings-tab:hover:not(.active) { background: #232322; color: var(--text-dark); }
+.settings-tab.active { background: var(--highlight); color: var(--accent-text); }
+
+/* Two columns inside a tab so wide screens aren't half empty, and each
+   section keeps its own height rather than stretching to match. */
+.settings-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 0 24px;
+  align-items: start;
+}
+.settings-panel > * { min-width: 0; }
+@media (max-width: 900px) {
+  .settings-panel { grid-template-columns: 1fr; }
+}
+
+/* Role badge in the user dropdown. */
+.navbar-menu-head .role-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #232322;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.navbar-menu-head .role-badge.is-admin {
+  background: var(--highlight);
+  color: var(--accent-text);
+}
+
+/* Product-mix: click hint and slice-summary modal stats. */
+.donut-tip { font-size: 0.75rem; color: var(--text-muted); }
+.prod-stat {
+  flex: 1;
+  padding: 12px 14px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.prod-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.prod-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ---- Entry form modal (New / Edit on the same page) --------------------- */
+.entry-form-modal {
+  width: 100%;
+  max-width: 900px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.75);
+}
+/* The form scrolls inside the panel; its own padding is retained. */
+.entry-form-inner {
+  padding: 24px 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.entry-form-inner::-webkit-scrollbar { width: 9px; }
+.entry-form-inner::-webkit-scrollbar-thumb { background: #38383571; border-radius: 8px; }
+/* Header sticks so New Entry / Edit + close stay reachable while scrolling. */
+.entry-form-head {
+  position: sticky;
+  top: -24px;                 /* cancel the container's top padding */
+  margin: -24px -28px 20px;
+  padding: 20px 28px;
+  background: var(--bg-white);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 2;
+}
+.entry-form-head h1 { font-size: 1.25rem; }
+@media (max-width: 640px) {
+  .entry-form-inner { padding: 16px; }
+  .entry-form-head { top: -16px; margin: -16px -16px 16px; padding: 16px; }
+}
+
+/* ---- Product catalogue manager (Settings › System) ---------------------- */
+.prodmgr-add { display: flex; gap: 8px; margin-bottom: 14px; }
+.prodmgr-add .input-field { flex: 1; }
+.prodmgr-list { display: flex; flex-direction: column; gap: 6px; }
+.prodmgr-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+}
+
+/* Inline "add product" control in the entry form. */
+.product-add-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.product-add-pill:hover { color: var(--accent-text); border-color: var(--primary-accent); }
+.product-add-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--primary-accent);
+  border-radius: 999px;
+  background: var(--bg-white);
+}
+.product-add-inline input {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-dark);
+  font-family: inherit;
+  font-size: 0.85rem;
+  width: 130px;
+}
+.product-add-inline input::placeholder { color: #5A5A57; }
+.product-add-inline .entry-icon-btn { width: 26px; height: 26px; }

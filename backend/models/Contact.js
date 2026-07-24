@@ -1,6 +1,10 @@
 import mongoose from 'mongoose';
 
 const contactSchema = new mongoose.Schema({
+    // Human-facing entry number (#1, #2, …). Mongo's _id is unique but is a
+    // 24-char hex string nobody can read out over the phone; this is the ID
+    // staff actually refer to. Assigned in ContactController.insert.
+    entry_no: { type: Number, default: null, index: true },
     honorific: { type: String, default: null },
     full_name: { type: String, required: true },
     relation: { type: String, default: null },

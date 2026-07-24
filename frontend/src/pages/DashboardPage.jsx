@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import DonutChart from '../components/DonutChart';
+import ProductSummaryModal from '../components/ProductSummaryModal';
 import DateRangeFilter from '../components/DateRangeFilter';
 import { Users, Store, UserCheck, Star } from 'lucide-react';
 
@@ -32,13 +33,19 @@ function Bars({ data, color, filterKey, navigate, emptyText = 'No data yet' }) {
   );
 }
 
-function StatCard({ icon, label, value, accent }) {
+// `empty` means the underlying field has no data at all, which is different
+// from a genuine count of zero. Showing a bare 0 for both makes a working
+// dashboard look broken — which is exactly how it read on real data.
+function StatCard({ icon, label, value, accent, empty, hint }) {
   return (
-    <div className="stat-card">
+    <div className="stat-card" title={empty ? hint : undefined}>
       <div className="stat-icon" style={{ background: `${accent}1A`, color: accent }}>{icon}</div>
-      <div>
-        <div className="stat-value">{value}</div>
+      <div style={{ minWidth: 0 }}>
+        <div className="stat-value" style={empty ? { color: 'var(--text-muted)', fontWeight: 600 } : undefined}>
+          {empty ? '—' : value}
+        </div>
         <div className="stat-label">{label}</div>
+        {empty && <div className="stat-empty-note">{hint}</div>}
       </div>
     </div>
   );
@@ -50,6 +57,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   // "All time" first — the dashboard opens showing everything, then narrows.
   const [range, setRange] = useState({ preset: 'all', from: null, to: null });
+  const [productSummary, setProductSummary] = useState(null);  // slice-click summary
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +75,14 @@ export default function DashboardPage() {
   const dealers = find(data?.byCategory, 'DEALER');
   const customers = find(data?.byCategory, 'CUSTOMER');
   const highPotential = find(data?.byGrade, 'High Potential');
+
+  // Distinguish "no entry has this field filled in" from "the count is zero".
+  // Without this a dashboard with unrecorded grades looks like a failed fetch.
+  const anyCategory = (data?.byCategory || []).length > 0;
+  const anyGrade = (data?.byGrade || []).length > 0;
+  // The category values actually present, so the hint can name them rather than
+  // just saying "no data" while the chart below plainly shows categories.
+  const topCategories = (data?.byCategory || []).slice(0, 3).map(c => c.label).join(', ');
   // The donut's whole: every product selection made, across all contacts.
   const productSelections = (data?.byProduct || []).reduce((s, d) => s + d.count, 0);
 
@@ -98,14 +114,19 @@ export default function DashboardPage() {
           {/* Stat cards */}
           <div className="stat-grid">
             <StatCard icon={<Users size={22} />} label="Total Contacts" value={total} accent="#E25C24" />
-            <StatCard icon={<Store size={22} />} label="Dealers" value={dealers} accent="#0369A1" />
-            <StatCard icon={<UserCheck size={22} />} label="Customers" value={customers} accent="#7E22CE" />
-            <StatCard icon={<Star size={22} />} label="High Potential" value={highPotential} accent="#16A34A" />
+            <StatCard icon={<Store size={22} />} label="Dealers" value={dealers} accent="#0369A1"
+              empty={dealers === 0 && anyCategory}
+              hint={`No entry is categorised "DEALER"${topCategories ? ` — current values: ${topCategories}` : ''}`} />
+            <StatCard icon={<UserCheck size={22} />} label="Customers" value={customers} accent="#7E22CE"
+              empty={customers === 0 && anyCategory}
+              hint={`No entry is categorised "CUSTOMER"${topCategories ? ` — current values: ${topCategories}` : ''}`} />
+            <StatCard icon={<Star size={22} />} label="High Potential" value={highPotential} accent="#16A34A"
+              empty={highPotential === 0}
+              hint={anyGrade ? 'No entry graded "High Potential" yet' : 'Customer Grade not recorded on any entry yet'} />
           </div>
 
-          {/* Products — the core of the request. Two views of the same data:
-              the donut answers "what share of demand is each product", the bars
-              answer "exactly how many contacts buy each one". */}
+          {/* Products. One card, three readings (Share / Ranked / Table) — a
+              separate bar card duplicated this same data. */}
           <div className="form-section">
             <div className="form-section-title">Product Mix</div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: -6, marginBottom: 14 }}>
@@ -114,14 +135,9 @@ export default function DashboardPage() {
             </p>
             <DonutChart
               data={data?.byProduct}
-              onSliceClick={(label) => navigate(`/?product=${encodeURIComponent(label)}`)}
+              onSelect={(label, meta) => setProductSummary({ label, ...meta })}
               valueNoun="selections"
             />
-          </div>
-
-          <div className="form-section">
-            <div className="form-section-title">Contacts by Product</div>
-            <Bars data={data?.byProduct} color="#2a78d6" filterKey="product" navigate={navigate} emptyText="No products recorded on contacts yet." />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
@@ -150,6 +166,13 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <ProductSummaryModal
+        product={productSummary}
+        totalSelections={productSelections}
+        onClose={() => setProductSummary(null)}
+        onSeeAll={(label) => navigate(`/?product=${encodeURIComponent(label)}`)}
+      />
     </div>
   );
 }

@@ -12,6 +12,18 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // every range would make the dashboard look empty rather than honest.
 const EFFECTIVE_DATE = { $ifNull: ['$contact_date', '$createdAt'] };
 
+// Next human-facing entry number. Reads the current max rather than keeping a
+// counter document, so it stays correct after imports, restores, and deletions.
+// This is a single-writer office app; if it ever becomes concurrent, move to a
+// findOneAndUpdate counter — a race here would hand two entries the same number.
+const nextEntryNo = async () => {
+    const top = await Contact.findOne({ entry_no: { $ne: null } })
+        .sort({ entry_no: -1 })
+        .select('entry_no')
+        .lean();
+    return (top?.entry_no || 0) + 1;
+};
+
 // Builds the $expr for a [from, to] window. Dates arrive as 'YYYY-MM-DD' and are
 // interpreted in server-local time, inclusive of the whole `to` day. Returns
 // null when no usable bound was supplied, so callers can skip the stage.
@@ -35,9 +47,21 @@ export default class ContactController {
     // Paginated + filtered list.
     // Body: { page, pageSize, search, state, district, city, category, all }
     async getAll(req, res, next) {
-        const { search, state, district, city, category, relation, customer_grade, house_type, purchase_type, product, all } = req.body || {};
+        const { search, state, district, city, category, relation, customer_grade, house_type, purchase_type, product, all, years_ago } = req.body || {};
 
         const query = {};
+
+        // "Bought N years ago" — the window [N+1 years ago, N years ago), so
+        // years_ago=2 means purchases in that contact's third year back, not
+        // "any time in the last 2 years". Non-overlapping buckets, so the
+        // counts across 2/3/4/5/6 never double-count the same contact.
+        const yearsBack = parseInt(years_ago, 10);
+        if (Number.isInteger(yearsBack) && yearsBack > 0) {
+            const now = new Date();
+            const upper = new Date(now.getFullYear() - yearsBack, now.getMonth(), now.getDate());
+            const lower = new Date(now.getFullYear() - (yearsBack + 1), now.getMonth(), now.getDate());
+            query.$expr = { $and: [{ $gte: [EFFECTIVE_DATE, lower] }, { $lt: [EFFECTIVE_DATE, upper] }] };
+        }
         if (state) query.state = String(state);
         if (district) query.district = String(district);
         if (city) query.village_town = String(city);
@@ -205,6 +229,7 @@ export default class ContactController {
         }
 
         const newContact = new Contact({
+            entry_no: await nextEntryNo(),
             honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark,
             village_town, mandal, district, state, pincode, phone_1, phone_2, category,
             customer_grade, house_type, purchase_type,
@@ -243,6 +268,11 @@ export default class ContactController {
         if (valid.length === 0) {
             throw new ApiError(400, 'No valid contacts found: verify required fields and 10-digit phone format');
         }
+
+        // Number the batch from the current high-water mark so imported rows
+        // get readable entry numbers too, contiguous with what's already there.
+        let seq = await nextEntryNo();
+        for (const c of valid) c.entry_no = seq++;
 
         // ordered:false keeps inserting past individual failures.
         const inserted = await Contact.insertMany(valid, { ordered: false });

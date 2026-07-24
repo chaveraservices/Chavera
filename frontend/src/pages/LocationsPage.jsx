@@ -194,21 +194,21 @@ export default function LocationsPage() {
   const currentLocObj = locations.find(l => l.state === selectedState?.state);
 
   return (
-    <div className="page-full-bleed" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F8FAFC' }}>
+    <div className="page-full-bleed" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-main)' }}>
 
       {/* ══ Top Bar ══════════════════════════════════════════════════════════ */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 28px', background: '#fff',
-        borderBottom: '1px solid #E2E8F0', gap: 20, flexWrap: 'wrap',
+        padding: '14px 28px', background: 'var(--bg-white)',
+        borderBottom: '1px solid var(--border-color)', gap: 20, flexWrap: 'wrap',
         flexShrink: 0,
       }}>
         {/* Title */}
         <div>
-          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1A365D', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-dark)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <MapPin size={20} color="var(--primary-accent)" /> States &amp; Districts
           </h1>
-          <p style={{ fontSize: '0.78rem', color: '#94A3B8', margin: '2px 0 0' }}>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
             Manage all your states, districts &amp; cities in one place
           </p>
         </div>
@@ -216,21 +216,21 @@ export default function LocationsPage() {
         {/* Global search */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          background: '#F8FAFC', border: '1px solid #E2E8F0',
+          background: 'var(--bg-main)', border: '1px solid var(--border-color)',
           borderRadius: 8, padding: '8px 14px', flex: '0 1 340px',
         }}
           onFocusCapture={e => e.currentTarget.style.borderColor = 'var(--primary-accent)'}
-          onBlurCapture={e => e.currentTarget.style.borderColor = '#E2E8F0'}
+          onBlurCapture={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
         >
-          <Search size={15} color="#94A3B8" style={{ flexShrink: 0 }} />
+          <Search size={15} color="var(--text-muted)" style={{ flexShrink: 0 }} />
           <input
             ref={searchRef}
-            style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, fontFamily: 'inherit', fontSize: '0.88rem', color: '#1A365D' }}
+            style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, fontFamily: 'inherit', fontSize: '0.88rem', color: 'var(--text-dark)' }}
             placeholder="Search states, districts or cities..."
             value={globalSearch}
             onChange={e => setGlobalSearch(e.target.value)}
           />
-          <span style={{ fontSize: '0.72rem', color: '#94A3B8', background: '#E2E8F0', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>Ctrl K</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--border-color)', borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>Ctrl K</span>
         </div>
 
         {/* Stats */}
@@ -238,14 +238,14 @@ export default function LocationsPage() {
           {[
             { icon: <MapPin size={16} color="var(--primary-accent)" />, value: locations.length, label: 'States' },
             { icon: <LayoutGrid size={16} color="#3B82F6" />, value: totalDistricts, label: 'Districts' },
-            { icon: <Building2 size={16} color="#059669" />, value: totalCities, label: 'Cities' },
+            { icon: <Building2 size={16} color="#34D399" />, value: totalCities, label: 'Cities' },
           ].map(({ icon, value, label }) => (
             <div key={label} style={{ textAlign: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
                 {icon}
-                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1A365D' }}>{value}</span>
+                <span style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-dark)' }}>{value}</span>
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#94A3B8', marginTop: 1 }}>{label}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 1 }}>{label}</div>
             </div>
           ))}
         </div>
@@ -257,12 +257,12 @@ export default function LocationsPage() {
         {/* ── Left Sidebar ────────────────────────────────────────────────── */}
         <div style={{
           width: 268, flexShrink: 0,
-          background: '#fff', borderRight: '1px solid #E2E8F0',
+          background: 'var(--bg-white)', borderRight: '1px solid var(--border-color)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
 
           {/* Add state input */}
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid #F1F5F9' }}>
+          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-color)' }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               background: '#FFF7F5', border: '1px solid #FDDCCC',
@@ -275,7 +275,7 @@ export default function LocationsPage() {
               <MapPin size={14} color="var(--primary-accent)" style={{ flexShrink: 0 }} />
               <input
                 ref={stateInputRef}
-                style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, fontFamily: 'inherit', fontSize: '0.85rem', color: '#1A365D' }}
+                style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, fontFamily: 'inherit', fontSize: '0.85rem', color: 'var(--text-dark)' }}
                 placeholder="Add new state..."
                 value={newState}
                 onChange={e => setNewState(e.target.value)}
@@ -296,7 +296,7 @@ export default function LocationsPage() {
                 ))}
               </div>
             ) : filteredLocations.length === 0 ? (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94A3B8' }}>
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 <MapPin size={28} style={{ opacity: 0.2, marginBottom: 8 }} />
                 <p style={{ fontWeight: 600, fontSize: '0.85rem' }}>No states yet</p>
               </div>
@@ -315,14 +315,14 @@ export default function LocationsPage() {
                       borderLeft: `3px solid ${isActive ? 'var(--primary-accent)' : 'transparent'}`,
                       transition: 'background 0.15s',
                     }}
-                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F8FAFC'; }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-main)'; }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0 }}>
-                      <MapPin size={14} color={isActive ? 'var(--primary-accent)' : '#CBD5E1'} style={{ flexShrink: 0 }} />
+                      <MapPin size={14} color={isActive ? 'var(--primary-accent)' : '#5A5A57'} style={{ flexShrink: 0 }} />
                       <span style={{
                         fontWeight: isActive ? 700 : 500, fontSize: '0.88rem',
-                        color: isActive ? 'var(--primary-accent)' : '#1A365D',
+                        color: isActive ? 'var(--primary-accent)' : 'var(--text-dark)',
                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                       }}>
                         {loc.state}
@@ -331,7 +331,7 @@ export default function LocationsPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <span style={{
                         fontWeight: 700, fontSize: '0.82rem',
-                        color: isActive ? 'var(--primary-accent)' : '#94A3B8',
+                        color: isActive ? 'var(--primary-accent)' : 'var(--text-muted)',
                         minWidth: 16, textAlign: 'right',
                       }}>
                         {dCount}
@@ -343,11 +343,11 @@ export default function LocationsPage() {
                         }}
                         style={{
                           background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-                          color: '#CBD5E1', display: 'flex', alignItems: 'center', borderRadius: 4,
+                          color: '#5A5A57', display: 'flex', alignItems: 'center', borderRadius: 4,
                           transition: 'color 0.15s',
                         }}
-                        onMouseEnter={e => e.currentTarget.style.color = '#DC2626'}
-                        onMouseLeave={e => e.currentTarget.style.color = '#CBD5E1'}
+                        onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#5A5A57'}
                         title="Delete state"
                       >
                         <MoreVertical size={14} />
@@ -363,7 +363,7 @@ export default function LocationsPage() {
         {/* ── Right Panel ──────────────────────────────────────────────────── */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
           {!selectedState ? (
-            <div style={{ textAlign: 'center', padding: '80px 32px', color: '#94A3B8' }}>
+            <div style={{ textAlign: 'center', padding: '80px 32px', color: 'var(--text-muted)' }}>
               <MapPin size={48} style={{ opacity: 0.15, marginBottom: 16 }} />
               <p style={{ fontWeight: 700, fontSize: '1rem' }}>Select a state from the list</p>
               <p style={{ fontSize: '0.85rem', marginTop: 6 }}>Or add a new state using the field on the left.</p>
@@ -385,16 +385,16 @@ export default function LocationsPage() {
                           if (e.key === 'Escape') setRenamingState('');
                         }}
                         style={{
-                          fontSize: '1.2rem', fontWeight: 800, color: '#1A365D',
+                          fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-dark)',
                           border: 'none', borderBottom: '2px solid var(--primary-accent)',
                           outline: 'none', background: 'transparent', fontFamily: 'inherit',
                         }}
                       />
                       <button onClick={handleRenameStateSubmit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16A34A', display: 'flex' }}><Check size={18} /></button>
-                      <button onClick={() => setRenamingState('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex' }}><X size={18} /></button>
+                      <button onClick={() => setRenamingState('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
                     </div>
                   ) : (
-                    <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1A365D', margin: 0 }}>{selectedState.state}</h2>
+                    <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-dark)', margin: 0 }}>{selectedState.state}</h2>
                   )}
                   <span style={{
                     background: '#FFF7F5', color: 'var(--primary-accent)', border: '1px solid #FDDCCC',
@@ -408,12 +408,12 @@ export default function LocationsPage() {
                     onClick={() => { setRenamingState(selectedState.state); setRenameValue(selectedState.state); }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
-                      background: 'none', border: '1px solid #E2E8F0', borderRadius: 8,
+                      background: 'none', border: '1px solid var(--border-color)', borderRadius: 8,
                       padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit',
-                      fontSize: '0.83rem', fontWeight: 600, color: '#64748B', transition: 'all 0.15s',
+                      fontSize: '0.83rem', fontWeight: 600, color: 'var(--text-muted)', transition: 'all 0.15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#94A3B8'; e.currentTarget.style.color = '#1A365D'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#64748B'; }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--text-muted)'; e.currentTarget.style.color = 'var(--text-dark)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                   >
                     <Edit2 size={14} /> Rename
                   </button>
@@ -423,9 +423,9 @@ export default function LocationsPage() {
                       display: 'flex', alignItems: 'center', gap: 6,
                       background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8,
                       padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit',
-                      fontSize: '0.83rem', fontWeight: 600, color: '#DC2626', transition: 'all 0.15s',
+                      fontSize: '0.83rem', fontWeight: 600, color: 'var(--danger)', transition: 'all 0.15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#3B1A1A'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; }}
                   >
                     <Trash2 size={14} /> Delete
@@ -438,13 +438,13 @@ export default function LocationsPage() {
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   border: '1.5px solid var(--primary-accent)', borderRadius: '8px',
-                  padding: '10px 16px', background: '#fff',
+                  padding: '10px 16px', background: 'var(--bg-white)',
                 }}>
                   <input
                     ref={districtInputRef}
                     style={{
                       flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                      fontFamily: 'inherit', fontSize: '0.9rem', color: '#1A365D',
+                      fontFamily: 'inherit', fontSize: '0.9rem', color: 'var(--text-dark)',
                       resize: 'none',
                     }}
                     placeholder={`Add district to ${selectedState.state}… (paste multiple separated by newlines)`}
@@ -461,26 +461,26 @@ export default function LocationsPage() {
 
               {/* Districts header + search */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <h3 style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1A365D', margin: 0 }}>
+                <h3 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-dark)', margin: 0 }}>
                   Districts ({selectedDistricts.length}{districtSearch ? ` of ${currentLocObj?.districts?.length || 0}` : ''})
                 </h3>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 7,
-                  background: '#F8FAFC', border: '1px solid #E2E8F0',
+                  background: 'var(--bg-main)', border: '1px solid var(--border-color)',
                   borderRadius: 8, padding: '6px 12px',
                 }}
                   onFocusCapture={e => e.currentTarget.style.borderColor = 'var(--primary-accent)'}
-                  onBlurCapture={e => e.currentTarget.style.borderColor = '#E2E8F0'}
+                  onBlurCapture={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
                 >
-                  <Search size={13} color="#94A3B8" />
+                  <Search size={13} color="var(--text-muted)" />
                   <input
-                    style={{ border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: '0.82rem', color: '#1A365D', width: 130 }}
+                    style={{ border: 'none', outline: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: '0.82rem', color: 'var(--text-dark)', width: 130 }}
                     placeholder="Search districts..."
                     value={districtSearch}
                     onChange={e => setDistrictSearch(e.target.value)}
                   />
                   {districtSearch && (
-                    <button onClick={() => setDistrictSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#94A3B8' }}>
+                    <button onClick={() => setDistrictSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--text-muted)' }}>
                       <X size={12} />
                     </button>
                   )}
@@ -489,14 +489,14 @@ export default function LocationsPage() {
 
               {/* Districts list */}
               <div style={{
-                background: '#fff', border: '1px solid #E2E8F0',
+                background: 'var(--bg-white)', border: '1px solid var(--border-color)',
                 borderRadius: 12, overflow: 'hidden',
               }}>
                 {selectedDistricts.length === 0 ? (
-                  <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94A3B8' }}>
+                  <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
                     <LayoutGrid size={28} style={{ opacity: 0.2, marginBottom: 8 }} />
                     <p style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: 4 }}>No districts yet</p>
-                    <p style={{ fontSize: '0.8rem' }}>Type a name above and press <kbd style={{ background: '#F1F5F9', borderRadius: 4, padding: '1px 5px', fontSize: '0.75rem' }}>Enter</kbd></p>
+                    <p style={{ fontSize: '0.8rem' }}>Type a name above and press <kbd style={{ background: '#232322', borderRadius: 4, padding: '1px 5px', fontSize: '0.75rem' }}>Enter</kbd></p>
                   </div>
                 ) : (
                   <>
@@ -506,14 +506,14 @@ export default function LocationsPage() {
                         style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           padding: '13px 18px',
-                          borderBottom: idx < selectedDistricts.length - 1 ? '1px solid #F1F5F9' : 'none',
+                          borderBottom: idx < selectedDistricts.length - 1 ? '1px solid var(--border-color)' : 'none',
                           transition: 'background 0.1s',
                         }}
                         onMouseEnter={e => e.currentTarget.style.background = '#FAFBFC'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                          <GripVertical size={15} color="#CBD5E1" style={{ flexShrink: 0, cursor: 'grab' }} />
+                          <GripVertical size={15} color="#5A5A57" style={{ flexShrink: 0, cursor: 'grab' }} />
                           {editingDistrict === dist.name ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                               <input
@@ -526,16 +526,16 @@ export default function LocationsPage() {
                                 }}
                                 style={{
                                   flex: 1, fontFamily: 'inherit', fontSize: '0.9rem',
-                                  fontWeight: 500, color: '#1A365D',
+                                  fontWeight: 500, color: 'var(--text-dark)',
                                   border: 'none', borderBottom: '2px solid var(--primary-accent)',
                                   outline: 'none', background: 'transparent',
                                 }}
                               />
                               <button onClick={handleRenameDistrictSubmit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16A34A', display: 'flex' }}><Check size={15} /></button>
-                              <button onClick={() => setEditingDistrict('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex' }}><X size={15} /></button>
+                              <button onClick={() => setEditingDistrict('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={15} /></button>
                             </div>
                           ) : (
-                            <span style={{ fontWeight: 500, fontSize: '0.92rem', color: '#1A365D' }}>{dist.name}</span>
+                            <span style={{ fontWeight: 500, fontSize: '0.92rem', color: 'var(--text-dark)' }}>{dist.name}</span>
                           )}
                         </div>
                         {editingDistrict !== dist.name && (
@@ -544,11 +544,11 @@ export default function LocationsPage() {
                               onClick={() => { setEditingDistrict(dist.name); setEditDistrictValue(dist.name); }}
                               style={{
                                 background: 'none', border: 'none', cursor: 'pointer', padding: '5px 7px',
-                                color: '#CBD5E1', display: 'flex', alignItems: 'center', borderRadius: 6,
+                                color: '#5A5A57', display: 'flex', alignItems: 'center', borderRadius: 6,
                                 transition: 'color 0.15s, background 0.15s',
                               }}
                               onMouseEnter={e => { e.currentTarget.style.color = '#3B82F6'; e.currentTarget.style.background = '#EFF6FF'; }}
-                              onMouseLeave={e => { e.currentTarget.style.color = '#CBD5E1'; e.currentTarget.style.background = 'none'; }}
+                              onMouseLeave={e => { e.currentTarget.style.color = '#5A5A57'; e.currentTarget.style.background = 'none'; }}
                               title="Edit district"
                             >
                               <Edit2 size={14} />
@@ -557,11 +557,11 @@ export default function LocationsPage() {
                               onClick={() => setConfirmDelete({ isOpen: true, type: 'district', name: dist.name })}
                               style={{
                                 background: 'none', border: 'none', cursor: 'pointer', padding: '5px 7px',
-                                color: '#CBD5E1', display: 'flex', alignItems: 'center', borderRadius: 6,
+                                color: '#5A5A57', display: 'flex', alignItems: 'center', borderRadius: 6,
                                 transition: 'color 0.15s, background 0.15s',
                               }}
-                              onMouseEnter={e => { e.currentTarget.style.color = '#DC2626'; e.currentTarget.style.background = '#FEF2F2'; }}
-                              onMouseLeave={e => { e.currentTarget.style.color = '#CBD5E1'; e.currentTarget.style.background = 'none'; }}
+                              onMouseEnter={e => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = '#FEF2F2'; }}
+                              onMouseLeave={e => { e.currentTarget.style.color = '#5A5A57'; e.currentTarget.style.background = 'none'; }}
                               title="Delete district"
                             >
                               <Trash2 size={14} />
@@ -577,11 +577,11 @@ export default function LocationsPage() {
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         gap: 8, padding: '14px', cursor: 'pointer',
-                        borderTop: '1px solid #F1F5F9', color: '#94A3B8',
+                        borderTop: '1px solid var(--border-color)', color: 'var(--text-muted)',
                         transition: 'background 0.15s, color 0.15s',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.color = '#64748B'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-main)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                     >
                       <CirclePlus size={16} />
                       <div style={{ textAlign: 'center' }}>
@@ -601,7 +601,7 @@ export default function LocationsPage() {
       {toast && (
         <div style={{
           position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
-          background: '#1A365D', color: '#fff', borderRadius: 10,
+          background: 'var(--text-dark)', color: 'var(--bg-white)', borderRadius: 10,
           padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12,
           boxShadow: '0 8px 24px rgba(0,0,0,0.18)', zIndex: 200,
           animation: 'fadeUp 0.25s ease-out',
@@ -614,7 +614,7 @@ export default function LocationsPage() {
               Undo
             </button>
           )}
-          <button onClick={() => setToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', padding: 0 }}>
+          <button onClick={() => setToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0 }}>
             <X size={14} />
           </button>
         </div>

@@ -3,6 +3,8 @@ import { Lock, Save, CheckCircle } from 'lucide-react';
 import CustomSelect from '../components/CustomSelect';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+import UserAccessPanel from '../components/UserAccessPanel';
+import ProductManager from '../components/ProductManager';
 
 function Section({ title, children }) {
   return (
@@ -16,6 +18,10 @@ function Section({ title, children }) {
 export default function SettingsPage() {
   const { user } = useAuth();
   const profile = user || { name: '', email: '' };
+  // Sessions predating roles carry none; treat those as admin (matches the API).
+  const isAdmin = (user?.role || 'admin') === 'admin';
+  // Tabs instead of one long scroll: every section is now one click away.
+  const [tab, setTab] = useState('account');
   const [pwData, setPwData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
@@ -106,17 +112,33 @@ export default function SettingsPage() {
         <h1>Settings</h1>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
-        
-        {/* Left Column */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="settings-tabs" role="tablist">
+        {[
+          ['account', 'Account'],
+          ...(isAdmin ? [['users', 'Users & Roles'], ['system', 'System']] : []),
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            className={`settings-tab ${tab === id ? 'active' : ''}`}
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="settings-panel">
+        {tab === 'account' && (<>
       <Section title="PROFILE">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
           <div style={{
             width: 64, height: 64, borderRadius: '50%',
             background: 'linear-gradient(135deg, var(--primary-accent), #f59e0b)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontSize: '1.6rem', fontWeight: 700,
+            color: 'var(--bg-white)', fontSize: '1.6rem', fontWeight: 700,
           }}>
             {profile.name ? profile.name[0].toUpperCase() : '?'}
           </div>
@@ -128,11 +150,11 @@ export default function SettingsPage() {
         <div className="form-grid">
           <div className="form-group">
             <label>Name</label>
-            <input className="input-field" value={profile.name} disabled style={{ background: '#F8FAFC', cursor: 'not-allowed' }} />
+            <input className="input-field" value={profile.name} disabled style={{ background: 'var(--bg-main)', cursor: 'not-allowed' }} />
           </div>
           <div className="form-group">
             <label>Email</label>
-            <input className="input-field" value={profile.email} disabled style={{ background: '#F8FAFC', cursor: 'not-allowed' }} />
+            <input className="input-field" value={profile.email} disabled style={{ background: 'var(--bg-main)', cursor: 'not-allowed' }} />
           </div>
         </div>
       </Section>
@@ -140,9 +162,9 @@ export default function SettingsPage() {
       {/* Change Password */}
       <Section title="SECURITY — CHANGE PASSWORD">
         <form onSubmit={handleChangePassword}>
-          {pwError && <div style={{ padding: '10px 14px', background: '#FEE2E2', color: '#DC2626', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{pwError}</div>}
+          {pwError && <div style={{ padding: '10px 14px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{pwError}</div>}
           {pwSuccess && (
-            <div style={{ padding: '10px 14px', background: '#D1FAE5', color: '#059669', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: '10px 14px', background: '#12301F', color: '#34D399', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 8 }}>
               <CheckCircle size={16} /> {pwSuccess}
             </div>
           )}
@@ -190,10 +212,26 @@ export default function SettingsPage() {
           {prefSaved ? 'Saved!' : 'Save Preferences'}
         </button>
       </Section>
+        </>)}
+
+        {tab === 'users' && isAdmin && (
+          <Section title="USER ACCESS &amp; ROLES">
+            <UserAccessPanel />
+          </Section>
+        )}
+
+        {tab === 'system' && isAdmin && (<>
+
+      <Section title="PRODUCTS">
+        <ProductManager />
+      </Section>
+
+
 
       {/* Server Preferences */}
+      {isAdmin && (
       <Section title="SERVER SETTINGS (UAT ONLY)">
-        <div className="form-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+        <div className="form-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
           <div>
             <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 4 }}>14-Minute Keep-Alive</div>
             <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Prevent the server from sleeping due to inactivity. (Always ON in Production)</div>
@@ -209,26 +247,24 @@ export default function SettingsPage() {
           >
             <div style={{
               position: 'absolute', top: 2, left: keepAliveEnabled ? 22 : 2, width: 20, height: 20,
-              background: 'white', borderRadius: '50%', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+              background: 'var(--bg-white)', borderRadius: '50%', transition: 'left 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
             }} />
           </button>
         </div>
       </Section>
-      </div>
-
-      {/* Right Column */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+      )}
 
       {/* Database Monitoring */}
+      {isAdmin && (
       <Section title="DATABASE STORAGE MONITORING">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Real-time MongoDB storage metrics</span>
-          <button className="btn" onClick={fetchDbStats} disabled={dbStatsLoading} style={{ padding: '6px 12px', fontSize: '0.85rem', border: '1px solid var(--border-color)', background: 'white' }}>
+          <button className="btn" onClick={fetchDbStats} disabled={dbStatsLoading} style={{ padding: '6px 12px', fontSize: '0.85rem', border: '1px solid var(--border-color)', background: 'var(--bg-white)' }}>
             {dbStatsLoading ? 'Refreshing...' : 'Refresh Stats'}
           </button>
         </div>
         
-        {dbStatsError && <div style={{ padding: '10px 14px', background: '#FEE2E2', color: '#DC2626', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{dbStatsError}</div>}
+        {dbStatsError && <div style={{ padding: '10px 14px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{dbStatsError}</div>}
         
         {dbStats && (() => {
           const maxBytes = 512 * 1024 * 1024;
@@ -243,40 +279,40 @@ export default function SettingsPage() {
           return (
             <>
               <div className="form-grid">
-                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
                   <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Database Name</label>
                   <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.dbName}</div>
                 </div>
-                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
                   <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Total Collections</label>
                   <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.collections}</div>
                 </div>
-                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
                   <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Total Documents</label>
                   <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.objects}</div>
                 </div>
-                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
                   <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Data Size</label>
                   <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.dataSize)}</div>
                 </div>
-                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
                   <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Storage Size</label>
                   <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.storageSize)}</div>
                 </div>
-                <div className="form-group" style={{ background: '#F8FAFC', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
                   <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Index Size</label>
                   <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.indexSize)}</div>
                 </div>
               </div>
 
               {dbStats.storageSize !== undefined && (
-                <div style={{ marginTop: 16, padding: '20px 24px', background: 'white', borderRadius: 12, border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                <div style={{ marginTop: 16, padding: '20px 24px', background: 'var(--bg-white)', borderRadius: 12, border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                     <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>Atlas Free Tier Usage</span>
                     <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(usedBytes)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ 512 MB</span></span>
                   </div>
                   
-                  <div style={{ width: '100%', height: 12, background: '#F1F5F9', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+                  <div style={{ width: '100%', height: 12, background: '#232322', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
                     <div style={{ 
                       position: 'absolute',
                       top: 0, left: 0, bottom: 0,
@@ -289,7 +325,7 @@ export default function SettingsPage() {
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontSize: '0.9rem' }}>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{usedPercent.toFixed(2)}% Used</span>
-                    <span style={{ color: '#059669', fontWeight: 600 }}>{formatMB(maxBytes - usedBytes)} Available</span>
+                    <span style={{ color: '#34D399', fontWeight: 600 }}>{formatMB(maxBytes - usedBytes)} Available</span>
                   </div>
                 </div>
               )}
@@ -297,10 +333,8 @@ export default function SettingsPage() {
           );
         })()}
       </Section>
-
-
-      </div>
-
+      )}
+        </>)}
       </div>
     </div>
   );

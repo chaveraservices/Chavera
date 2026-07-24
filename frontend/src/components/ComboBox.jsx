@@ -59,7 +59,7 @@ export default function ComboBox({
         onBlur={onBlur}
       />
       <span
-        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', cursor: disabled ? 'default' : 'pointer', color: '#94A3B8' }}
+        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', cursor: disabled ? 'default' : 'pointer', color: 'var(--text-muted)' }}
         onMouseDown={(e) => {
           e.preventDefault();
           if (disabled) return;

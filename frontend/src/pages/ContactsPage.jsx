@@ -1,22 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import api from '../utils/api';
 import useDebounce from '../utils/useDebounce';
 import { contactsToExportRows } from '../utils/contactFields';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, User as UserIcon, Download, Trash2, X, Tags, SlidersHorizontal } from 'lucide-react';
-import ColumnManager from '../components/ColumnManager';
+import { Search, Download, Upload, X, SlidersHorizontal } from 'lucide-react';
 import CustomSelect from '../components/CustomSelect';
-import ColumnFilter from '../components/ColumnFilter';
 import AlertModal from '../components/AlertModal';
-import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, PRODUCT_OPTIONS, CATEGORY_OPTIONS, RELATION_OPTIONS } from '../utils/contactFields';
+import EntryDetailModal from '../components/EntryDetailModal';
+import EntryFormModal from '../components/EntryFormModal';
+import { useAuth } from '../context/AuthContext';
+import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, CATEGORY_OPTIONS } from '../utils/contactFields';
+import useProducts from '../utils/useProducts';
 
-// Master column order + which are hidden by default. Users can reorder/toggle
-// these; ACTIONS is always pinned last and can't be hidden.
-const DEFAULT_COLUMN_ORDER = ['name', 'relation', 'location', 'phone', 'type', 'grade', 'house', 'purchase', 'products', 'age', 'business', 'insta', 'state', 'district', 'city', 'pincode', 'date', 'phone2'];
-const DEFAULT_HIDDEN = ['grade', 'house', 'purchase', 'products', 'age', 'business', 'insta', 'state', 'district', 'city', 'pincode', 'date', 'phone2'];
-
-export default function ContactsPage({ onAdd, onEdit }) {
+export default function ContactsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [contacts, setContacts] = useState([]); // current page only
@@ -25,13 +22,23 @@ export default function ContactsPage({ onAdd, onEdit }) {
   const [deletingId, setDeletingId] = useState(null);
   const [contactToDelete, setContactToDelete] = useState(null);
   const [exporting, setExporting] = useState(false);
-  const [printingLabels, setPrintingLabels] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'error' });
+  const [detailContact, setDetailContact] = useState(null); // row-click detail modal
+  const [formState, setFormState] = useState({ open: false, contact: null }); // entry form modal
+  const openNew = () => setFormState({ open: true, contact: null });
+  const openEdit = (c) => setFormState({ open: true, contact: c });
+  const closeForm = () => setFormState({ open: false, contact: null });
+  const filterPanelRef = useRef(null);
+  const filterBtnRef = useRef(null);
+
+  // Staff may create and edit entries but not delete, import, or export.
+  const { user } = useAuth();
+  const isAdmin = (user?.role || 'admin') === 'admin';
+  const { products: productCatalogue } = useProducts();
 
   // Filter options (distinct values from the server)
   const [tuples, setTuples] = useState([]);        // [{state, district, city}]
   const [categories, setCategories] = useState([]);
-  const [relations, setRelations] = useState([]);
   const [grades, setGrades] = useState([]);
   const [houseTypes, setHouseTypes] = useState([]);
   const [purchaseTypes, setPurchaseTypes] = useState([]);
@@ -44,50 +51,12 @@ export default function ContactsPage({ onAdd, onEdit }) {
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedRelation, setSelectedRelation] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedHouseType, setSelectedHouseType] = useState('');
   const [selectedPurchaseType, setSelectedPurchaseType] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
+  const [yearsAgo, setYearsAgo] = useState('');  // "bought N years ago" bucket
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-
-  // Column visibility + order (persisted). Reconciled against the known columns
-  // so stale localStorage never breaks the table.
-  const [columnOrder, setColumnOrder] = useState(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem('chavera_col_order'));
-      if (Array.isArray(s)) {
-        const valid = s.filter(k => DEFAULT_COLUMN_ORDER.includes(k));
-        return [...valid, ...DEFAULT_COLUMN_ORDER.filter(k => !valid.includes(k))];
-      }
-    } catch { /* ignore */ }
-    return DEFAULT_COLUMN_ORDER;
-  });
-  const [hiddenCols, setHiddenCols] = useState(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem('chavera_col_hidden'));
-      if (Array.isArray(s)) return s.filter(k => DEFAULT_COLUMN_ORDER.includes(k));
-    } catch { /* ignore */ }
-    return DEFAULT_HIDDEN;
-  });
-  useEffect(() => { localStorage.setItem('chavera_col_order', JSON.stringify(columnOrder)); }, [columnOrder]);
-  useEffect(() => { localStorage.setItem('chavera_col_hidden', JSON.stringify(hiddenCols)); }, [hiddenCols]);
-
-  // Move the dragged column to the target column's position.
-  const reorderColumns = (dragKey, targetKey) => {
-    setColumnOrder(prev => {
-      const next = [...prev];
-      const from = next.indexOf(dragKey);
-      const to = next.indexOf(targetKey);
-      if (from < 0 || to < 0) return prev;
-      next.splice(from, 1);
-      next.splice(to, 0, dragKey);
-      return next;
-    });
-  };
-  const toggleColumn = (key) => {
-    setHiddenCols(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-  };
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -102,13 +71,13 @@ export default function ContactsPage({ onAdd, onEdit }) {
     district: selectedDistrict,
     city: selectedCity,
     category: selectedCategory,
-    relation: selectedRelation,
     customer_grade: selectedGrade,
     house_type: selectedHouseType,
     purchase_type: selectedPurchaseType,
     product: selectedProduct,
+    years_ago: yearsAgo,
   }), [debouncedSearch, selectedState, selectedDistrict, selectedCity, selectedCategory,
-    selectedRelation, selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct]);
+    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, yearsAgo]);
 
   // Load distinct filter options once (and after mutations).
   useEffect(() => {
@@ -118,7 +87,6 @@ export default function ContactsPage({ onAdd, onEdit }) {
           const d = res.data.data;
           setTuples(d.tuples || []);
           setCategories(d.categories || []);
-          setRelations(d.relations || []);
           setGrades(d.grades || []);
           setHouseTypes(d.houseTypes || []);
           setPurchaseTypes(d.purchaseTypes || []);
@@ -139,7 +107,6 @@ export default function ContactsPage({ onAdd, onEdit }) {
       state: setSelectedState,
       district: setSelectedDistrict,
       city: setSelectedCity,
-      relation: setSelectedRelation,
     };
     let applied = false;
     for (const [key, setter] of Object.entries(setters)) {
@@ -150,6 +117,25 @@ export default function ContactsPage({ onAdd, onEdit }) {
     // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Floating filter panel: close on Esc or an outside click. Deliberately no
+  // scrim overlay — a full-viewport catcher also swallows wheel events, which
+  // stopped the page scrolling while the panel was open.
+  useEffect(() => {
+    if (!showMoreFilters) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShowMoreFilters(false); };
+    const onDown = (e) => {
+      if (filterPanelRef.current?.contains(e.target)) return;
+      if (filterBtnRef.current?.contains(e.target)) return; // let the button toggle
+      setShowMoreFilters(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [showMoreFilters]);
 
   // Reset to page 1 whenever filters or page size change.
   useEffect(() => {
@@ -195,8 +181,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
   const gradeOptions = mergeOpts(CUSTOMER_GRADES, grades);
   const houseOptions = mergeOpts(HOUSE_TYPES, houseTypes);
   const purchaseOptions = mergeOpts(PURCHASE_TYPES, purchaseTypes);
-  const productOptions = mergeOpts(PRODUCT_OPTIONS, products);
-  const relationOptions = mergeOpts(RELATION_OPTIONS, relations);
+  const productOptions = mergeOpts(productCatalogue, products);
   const categoryOptions = mergeOpts(CATEGORY_OPTIONS, categories);
 
   // Pagination math (driven by server total)
@@ -220,65 +205,6 @@ export default function ContactsPage({ onAdd, onEdit }) {
     } finally {
       setDeletingId(null);
       setContactToDelete(null);
-    }
-  };
-
-  // Print the filtered contacts as 50mm x 30mm mailing labels (Name + address + phone).
-  const handleLabels = async () => {
-    setPrintingLabels(true);
-    try {
-      const res = await api.post('/contact/list', { all: true, ...filterParams });
-      const source = res.data?.data?.items || [];
-      if (source.length === 0) {
-        setAlertConfig({ isOpen: true, title: 'Nothing to Print', message: 'No contacts match the current filters, so there are no labels to print.', type: 'info' });
-        return;
-      }
-
-      const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      const labels = source.map(c => {
-        const name = (c.honorific ? c.honorific + ' ' : '') + (c.full_name || '');
-        const address = [c.door_flat_no, c.street, c.village_town, c.district, c.state, c.pincode].filter(Boolean).join(', ');
-        const phone = [c.phone_1, c.phone_2].filter(Boolean).join(' / ');
-        return `<div class="label">
-          <div class="lname">${esc(name)}</div>
-          <div class="laddr">${esc(address)}</div>
-          <div class="lphone">${esc(phone)}</div>
-        </div>`;
-      }).join('');
-
-      const html = `<html><head><title>Mailing Labels</title><style>
-        * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; }
-        body { font-family: Arial, Helvetica, sans-serif; }
-        /* One 50x30mm label per page — for a roll / label printer */
-        @page { size: 50mm 30mm; margin: 0; }
-        .label {
-          width: 50mm; height: 30mm; padding: 2mm 3mm; overflow: hidden;
-          display: flex; flex-direction: column; justify-content: center;
-          page-break-after: always; break-after: page;
-        }
-        .label:last-child { page-break-after: auto; break-after: auto; }
-        .lname { font-weight: bold; font-size: 9pt; line-height: 1.15; }
-        .laddr { font-size: 7.5pt; line-height: 1.2; margin-top: 1mm; }
-        .lphone { font-size: 7.5pt; margin-top: 1mm; }
-      </style></head><body>${labels}</body></html>`;
-
-      // Print from a real window (not an iframe) so the @page 50x30mm size is honored.
-      const win = window.open('', '_blank', 'width=420,height=600');
-      if (!win) {
-        setAlertConfig({ isOpen: true, message: 'Please allow pop-ups for this site to print labels.', type: 'error' });
-        return;
-      }
-      win.document.open();
-      win.document.write(html);
-      win.document.close();
-      win.focus();
-      win.onafterprint = () => win.close();
-      setTimeout(() => win.print(), 350);
-    } catch (err) {
-      setAlertConfig({ isOpen: true, message: err.response?.data?.message || 'Failed to prepare labels', type: 'error' });
-    } finally {
-      setPrintingLabels(false);
     }
   };
 
@@ -311,29 +237,30 @@ export default function ContactsPage({ onAdd, onEdit }) {
     setSelectedDistrict('');
     setSelectedCity('');
     setSelectedCategory('');
-    setSelectedRelation('');
     setSelectedGrade('');
     setSelectedHouseType('');
     setSelectedPurchaseType('');
     setSelectedProduct('');
+    setYearsAgo('');
     // Drop any drill-down params left in the URL by the Dashboard, so the
     // address bar matches the (now empty) filter state.
     if (searchParams.toString()) setSearchParams({}, { replace: true });
   };
 
   const hasActiveFilters = searchQuery || selectedState || selectedDistrict || selectedCity ||
-    selectedCategory || selectedRelation || selectedGrade || selectedHouseType ||
-    selectedPurchaseType || selectedProduct;
+    selectedCategory || selectedGrade || selectedHouseType ||
+    selectedPurchaseType || selectedProduct || yearsAgo;
 
   const activeFilterCount = [selectedState, selectedDistrict, selectedCity, selectedCategory,
-    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, selectedRelation]
+    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, yearsAgo]
     .filter(Boolean).length + (searchQuery ? 1 : 0);
 
-  // Column registry: label, optional header filter, and cell renderer.
+  // Fixed five-column registry. The client asked for a compact table — every
+  // other field lives in the detail modal, opened by clicking a row.
   const columnDefs = {
+    id: { label: '#', render: c => <span className="cell-id">{c.entry_no != null ? c.entry_no : '—'}</span> },
     name: {
       label: 'NAME',
-      filter: { mode: 'search', value: searchQuery, onChange: setSearchQuery, placeholder: 'Search name / phone / business…' },
       render: c => (
         <>
           <div style={{ fontWeight: 600 }}>{c.honorific ? `${c.honorific} ` : ''}{c.full_name}</div>
@@ -341,105 +268,86 @@ export default function ContactsPage({ onAdd, onEdit }) {
         </>
       ),
     },
-    relation: { label: 'RELATION', filter: { mode: 'select', options: relationOptions, value: selectedRelation, onChange: setSelectedRelation }, render: c => c.relation || '-' },
-    location: { label: 'LOCATION', filter: { mode: 'select', options: uniqueCities, value: selectedCity, onChange: setSelectedCity }, render: c => `${c.village_town || ''}${c.district ? `, ${c.district}` : ''}` || '-' },
-    phone: { label: 'PHONE', filter: { mode: 'search', value: searchQuery, onChange: setSearchQuery, placeholder: 'Search phone…' }, render: c => c.phone_1 || '-' },
-    type: {
-      label: 'TYPE',
-      filter: { mode: 'select', options: categoryOptions, value: selectedCategory, onChange: setSelectedCategory },
-      render: c => c.category ? <span className={`badge ${c.category.toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>{c.category}</span> : '-',
+    products: {
+      label: 'PRODUCT',
+      render: c => (Array.isArray(c.products) && c.products.length) ? c.products.join(', ') : '—',
     },
-    grade: { label: 'GRADE', filter: { mode: 'select', options: gradeOptions, value: selectedGrade, onChange: setSelectedGrade }, render: c => c.customer_grade || '-' },
-    house: { label: 'HOUSE', filter: { mode: 'select', options: houseOptions, value: selectedHouseType, onChange: setSelectedHouseType }, render: c => c.house_type || '-' },
-    purchase: { label: 'PURCHASE', filter: { mode: 'select', options: purchaseOptions, value: selectedPurchaseType, onChange: setSelectedPurchaseType }, render: c => c.purchase_type || '-' },
-    products: { label: 'PRODUCTS', filter: { mode: 'select', options: productOptions, value: selectedProduct, onChange: setSelectedProduct }, render: c => (Array.isArray(c.products) && c.products.length) ? c.products.join(', ') : '-' },
-    age: { label: 'AGE', render: c => c.age || '-' },
-    business: { label: 'BUSINESS', render: c => c.business_name || '-' },
-    insta: { label: 'INSTAGRAM', render: c => c.instagram_id || '-' },
-    state: { label: 'STATE', filter: { mode: 'select', options: uniqueStates, value: selectedState, onChange: v => { setSelectedState(v); setSelectedDistrict(''); setSelectedCity(''); } }, render: c => c.state || '-' },
-    district: { label: 'DISTRICT', filter: { mode: 'select', options: uniqueDistricts, value: selectedDistrict, onChange: v => { setSelectedDistrict(v); setSelectedCity(''); } }, render: c => c.district || '-' },
-    city: { label: 'VILLAGE / TOWN', filter: { mode: 'select', options: uniqueCities, value: selectedCity, onChange: setSelectedCity }, render: c => c.village_town || '-' },
-    pincode: { label: 'PINCODE', render: c => c.pincode || '-' },
-    date: { label: 'DATE', render: c => { const d = c.contact_date || c.createdAt; return d ? new Date(d).toLocaleDateString('en-GB') : '-'; } },
-    phone2: { label: 'PHONE 2', render: c => c.phone_2 || '-' },
+    location: {
+      label: 'LOCATION',
+      render: c => `${c.village_town || ''}${c.district ? `, ${c.district}` : ''}` || '—',
+    },
+    phone: {
+      label: 'PHONE',
+      render: c => c.phone_1 || '—',
+    },
   };
 
-  const visibleColumns = columnOrder.filter(k => columnDefs[k] && !hiddenCols.includes(k));
-  const colCount = visibleColumns.length + 1; // + ACTIONS
-  const columnLabels = Object.fromEntries(columnOrder.map(k => [k, columnDefs[k]?.label || k]));
+  const visibleColumns = ['id', 'name', 'products', 'location', 'phone'];
+  const colCount = visibleColumns.length;
 
   return (
     <>
-      <div style={{ padding: '24px 32px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-dark)' }}>Directory</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>Manage and filter all your enterprise contacts</p>
+      {/* Single toolbar row: title, search, then actions. */}
+      <div className="entry-toolbar">
+        <div className="entry-toolbar-title">
+          <h1>Entry</h1>
+          <p>Click any row to see the full entry</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div className="search-bar" style={{ margin: 0, width: '280px', background: 'white' }}>
-            <Search size={16} color="var(--text-muted)" />
-            <input
-              type="text"
-              placeholder="Search name, phone, business…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div
-            onClick={() => navigate('/settings')}
-            title="Settings"
-            style={{ width: 32, height: 32, borderRadius: '50%', background: '#CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+
+        <div className="search-bar entry-toolbar-search">
+          <Search size={16} color="var(--text-muted)" />
+          <input
+            type="text"
+            placeholder="Search name, phone, business…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="entry-toolbar-actions">
+          <button
+            ref={filterBtnRef}
+            className="btn"
+            onClick={() => setShowMoreFilters(o => !o)}
+            style={{
+              border: '1px solid var(--border-color)',
+              background: (showMoreFilters || hasActiveFilters) ? 'var(--highlight)' : 'var(--bg-white)',
+              color: (showMoreFilters || hasActiveFilters) ? 'var(--accent-text)' : 'var(--text-dark)',
+            }}
           >
-            <UserIcon size={18} color="white" />
-          </div>
-        </div>
-      </div>
-
-      <div style={{ padding: '20px 32px', borderBottom: '1px solid var(--border-color)' }}>
-        {/* Controls row: Filters toggle (left) + actions (right) */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <SlidersHorizontal size={16} /> Filters
+            {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
+          </button>
+          {hasActiveFilters && (
             <button
-              className="btn"
-              onClick={() => setShowMoreFilters(o => !o)}
-              style={{
-                border: '1px solid var(--border-color)',
-                background: (showMoreFilters || hasActiveFilters) ? 'var(--highlight)' : 'var(--bg-white)',
-                color: (showMoreFilters || hasActiveFilters) ? 'var(--primary-accent)' : 'var(--text-dark)',
-              }}
+              className="btn-link"
+              onClick={clearFilters}
+              style={{ color: 'var(--danger)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
             >
-              <SlidersHorizontal size={16} /> Filters
-              {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
+              <X size={14} /> Clear all
             </button>
-            {hasActiveFilters && (
-              <button
-                className="btn-link"
-                onClick={clearFilters}
-                style={{ color: '#EF4444', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
-              >
-                <X size={14} /> Clear all
-              </button>
-            )}
-          </div>
-
-
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={handleLabels} disabled={printingLabels}
-              title="Print 50mm x 30mm mailing labels for the filtered contacts"
-              style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
-              <Tags size={16} /> {printingLabels ? 'Preparing…' : `Labels${hasActiveFilters ? ` (${total})` : ''}`}
-            </button>
+          )}
+          {isAdmin && (
             <button className="btn" onClick={handleExport} disabled={exporting}
               style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
               <Download size={16} /> {exporting ? 'Exporting…' : `Export${hasActiveFilters ? ` (${total})` : ''}`}
             </button>
-            <button className="btn btn-primary" onClick={onAdd}>+ Add Contact</button>
-          </div>
+          )}
+          {isAdmin && (
+            <button className="btn" onClick={() => navigate('/import')}
+              style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
+              <Upload size={16} /> Import
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={openNew}>+ New Entry</button>
         </div>
+      </div>
 
-        {/* Filter panel — labeled fields in an even grid */}
+      {/* Filters float over the table rather than displacing it — pushing the
+          content down on every toggle made the whole page jump. */}
+      <div className="filter-host">
         {showMoreFilters && (
-          <div className="filter-panel">
+          <div className="filter-panel" ref={filterPanelRef}>
             <div className="filter-field">
               <label>State</label>
               <CustomSelect value={selectedState}
@@ -491,14 +399,20 @@ export default function ContactsPage({ onAdd, onEdit }) {
                 placeholder="All Products" />
             </div>
             <div className="filter-field">
-              <label>Relation</label>
-              <CustomSelect value={selectedRelation} onChange={e => setSelectedRelation(e.target.value)}
-                options={[{ label: 'All Relations', value: '' }, ...relationOptions.map(r => ({ label: r, value: r }))]}
-                placeholder="All Relations" />
+              <label>Purchased</label>
+              <CustomSelect value={yearsAgo} onChange={e => setYearsAgo(e.target.value)}
+                options={[
+                  { label: 'Any time', value: '' },
+                  { label: '2 years ago', value: '2' },
+                  { label: '3 years ago', value: '3' },
+                  { label: '4 years ago', value: '4' },
+                  { label: '5 years ago', value: '5' },
+                  { label: '6 years ago', value: '6' },
+                ]}
+                placeholder="Any time" />
             </div>
           </div>
         )}
-
       </div>
 
       <div className="page-container">
@@ -506,29 +420,14 @@ export default function ContactsPage({ onAdd, onEdit }) {
           <table className="data-table">
             <thead>
               <tr>
-                {visibleColumns.map((key, i) => {
+                {visibleColumns.map((key) => {
                   const col = columnDefs[key];
-                  const alignRight = i === visibleColumns.length - 1;
                   return (
-                    <th key={key}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {i === 0 && (
-                          <ColumnManager
-                            order={columnOrder}
-                            hidden={hiddenCols}
-                            labels={columnLabels}
-                            onToggle={toggleColumn}
-                            onReorder={reorderColumns}
-                          />
-                        )}
-                        {col.filter
-                          ? <ColumnFilter label={col.label} alignRight={alignRight} {...col.filter} />
-                          : <span>{col.label}</span>}
-                      </div>
+                    <th key={key} className={key === 'id' ? 'th-id' : undefined}>
+                      <span>{col.label}</span>
                     </th>
                   );
                 })}
-                <th>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -548,30 +447,20 @@ export default function ContactsPage({ onAdd, onEdit }) {
                 </tr>
               ) : (
                 contacts.map(contact => (
-                  <tr key={contact._id}>
+                  <tr
+                    key={contact._id}
+                    className="row-clickable"
+                    onClick={() => setDetailContact(contact)}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open entry ${contact.entry_no ?? ''} ${contact.full_name}`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailContact(contact); }
+                    }}
+                  >
                     {visibleColumns.map(key => (
-                      <td key={key}>{columnDefs[key].render(contact)}</td>
+                      <td key={key} className={key === 'id' ? 'td-id' : undefined}>{columnDefs[key].render(contact)}</td>
                     ))}
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <button
-                          className="btn-link"
-                          onClick={() => onEdit(contact)}
-                          style={{ fontWeight: 600, color: 'var(--primary-accent)', padding: 0 }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn-link"
-                          onClick={() => setContactToDelete(contact)}
-                          disabled={deletingId === contact._id}
-                          style={{ padding: 0, color: deletingId === contact._id ? '#CBD5E1' : '#DC2626', display: 'flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <Trash2 size={15} />
-                          {deletingId === contact._id ? '…' : 'Delete'}
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 ))
               )}
@@ -649,7 +538,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
                 <button 
                   className="btn btn-primary" 
                   onClick={confirmDelete} 
-                  style={{ background: '#DC2626' }}
+                  style={{ background: 'var(--danger)' }}
                   disabled={deletingId}
                 >
                   {deletingId ? 'Deleting...' : 'Delete Contact'}
@@ -659,6 +548,21 @@ export default function ContactsPage({ onAdd, onEdit }) {
           </div>
         </div>
       )}
+
+      <EntryFormModal
+        open={formState.open}
+        contact={formState.contact}
+        onClose={closeForm}
+        onSaved={() => { closeForm(); setRefreshTick(t => t + 1); }}
+      />
+
+      <EntryDetailModal
+        contact={detailContact}
+        onClose={() => setDetailContact(null)}
+        onEdit={(c) => { setDetailContact(null); openEdit(c); }}
+        onDelete={isAdmin ? (c) => { setDetailContact(null); setContactToDelete(c); } : undefined}
+        onNotify={(msg) => setAlertConfig({ isOpen: true, message: msg, type: 'error' })}
+      />
 
       <AlertModal
         isOpen={alertConfig.isOpen}
