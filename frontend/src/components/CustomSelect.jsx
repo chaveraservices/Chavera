@@ -62,6 +62,17 @@ export default function CustomSelect({
     if (!isOpen) { setQuery(''); setActiveIdx(-1); }
   }, [isOpen, canSearch]);
 
+  // When the menu opens, scroll it into view within the modal so it isn't cut
+  // off near the bottom on shorter (14"/16") laptop screens. `nearest` means
+  // an already-visible dropdown doesn't jump.
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => {
+      menuRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 30);
+    return () => clearTimeout(t);
+  }, [isOpen]);
+
   const handleSelect = (val, { advance = false } = {}) => {
     if (onChange) onChange({ target: { name, value: val } });
     setIsOpen(false);
@@ -75,13 +86,21 @@ export default function CustomSelect({
 
     // Keyboard pick: mirror the form's Enter-advances-field behaviour by moving
     // focus to the next field (which, if it's a dropdown, opens on focus).
+    // Deferred a tick so the just-closed menu (and its search box) is gone and
+    // any field this selection enables — e.g. District after State — is live;
+    // otherwise the search input or a still-disabled field steals the focus.
     if (advance && advanceOnSelect && trigger) {
-      const scope = trigger.closest('form') || document;
-      const focusables = Array.from(
-        scope.querySelectorAll('input, select, textarea, [data-kbd-focusable]')
-      ).filter(n => !n.disabled && n.tabIndex !== -1 && n.offsetParent !== null);
-      const idx = focusables.indexOf(trigger);
-      if (idx >= 0 && idx < focusables.length - 1) focusables[idx + 1].focus();
+      setTimeout(() => {
+        const scope = trigger.closest('form') || document;
+        const focusables = Array.from(
+          scope.querySelectorAll('input, select, textarea, [data-kbd-focusable]')
+        ).filter(n =>
+          !n.disabled && n.tabIndex !== -1 && n.offsetParent !== null &&
+          !n.closest('.custom-select-menu')   // never land on a dropdown's search box
+        );
+        const idx = focusables.indexOf(trigger);
+        if (idx >= 0 && idx < focusables.length - 1) focusables[idx + 1].focus();
+      }, 0);
     }
   };
 

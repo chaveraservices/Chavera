@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Pencil, Check, X } from 'lucide-react';
 import useBodyScrollLock from '../utils/useBodyScrollLock';
 import { gradeWithSymbol } from '../utils/contactFields';
@@ -65,14 +66,17 @@ export default function ConfirmEntryModal({ isOpen, data, isEdit, saving, onConf
     .map(([label, get]) => [label, get(data)])
     .filter(([, v]) => v != null && String(v).trim() !== '');
 
-  return (
-    <div className="modal-overlay" style={{ zIndex: 400 }}>
-      <div className="entry-modal" role="dialog" aria-modal="true" aria-label="Confirm entry details">
+  // Rendered through a portal to <body> so it's a true full-screen overlay —
+  // not nested inside the form modal (which clips with overflow:hidden and made
+  // the header look cut off).
+  return createPortal(
+    <div className="modal-overlay confirm-overlay" style={{ zIndex: 500 }}>
+      <div className="entry-modal confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm entry details">
         <div className="entry-modal-head">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="entry-modal-name">Confirm {isEdit ? 'changes' : 'new entry'}</div>
+            <div className="entry-modal-name">{isEdit ? 'Review changes' : 'Review new entry'}</div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3 }}>
-              Check the details below before saving.
+              Check the details below, then save.
             </div>
           </div>
           <button type="button" className="entry-icon-btn" onClick={onEdit} title="Back to editing (Esc)">
@@ -104,6 +108,7 @@ export default function ConfirmEntryModal({ isOpen, data, isEdit, saving, onConf
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

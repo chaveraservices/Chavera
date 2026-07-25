@@ -11,6 +11,88 @@ const todayISO = () => {
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
+const pad2 = (n) => String(n).padStart(2, '0');
+const daysInMonth = (y, m) => new Date(y, m, 0).getDate(); // m is 1-12
+
+// Step ONE segment of an ISO date (YYYY-MM-DD) with cascading rollover:
+//  - day:   past the month's last day rolls into the next month (and year);
+//  - month: past December rolls into January of the next year;
+//  - year:  just moves the year, clamping the day (e.g. 29 Feb → 28 Feb).
+const stepSegment = (iso, seg, delta) => {
+  const base = iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : todayISO();
+  let [y, m, d] = base.split('-').map(Number);
+
+  if (seg === 'd') {
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + delta);   // Date arithmetic cascades month + year
+    return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+  }
+  if (seg === 'm') {
+    m += delta;
+    while (m > 12) { m -= 12; y += 1; }
+    while (m < 1) { m += 12; y -= 1; }
+  } else {
+    y += delta;
+  }
+  d = Math.min(d, daysInMonth(y, m));   // keep the day valid for the new month
+  return `${y}-${pad2(m)}-${pad2(d)}`;
+};
+
+// Segmented DD / MM / YYYY field. Replaces the native date input so ↑/↓ can act
+// on the focused segment with proper rollover (native arrows don't cascade).
+function DateField({ value, onChange }) {
+  const valid = value && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const [seg, setSeg] = useState(() => {
+    if (valid) { const [y, m, d] = value.split('-'); return { d, m, y }; }
+    return { d: '', m: '', y: '' };
+  });
+  const mRef = useRef(null);
+  const yRef = useRef(null);
+
+  // Reflect external changes (arrow step, "defaults to today", edit-load).
+  useEffect(() => {
+    if (valid) { const [y, m, d] = value.split('-'); setSeg({ d, m, y }); }
+    else setSeg({ d: '', m: '', y: '' });
+  }, [value, valid]);
+
+  const emit = (next) => {
+    const { d, m, y } = next;
+    if (d && m && y && y.length === 4) {
+      const yi = +y, mi = +m, di = +d;
+      if (mi >= 1 && mi <= 12 && di >= 1) {
+        onChange(`${yi}-${pad2(mi)}-${pad2(Math.min(di, daysInMonth(yi, mi)))}`);
+      }
+    }
+  };
+
+  const onType = (key, len, nextRef) => (e) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, len);
+    const next = { ...seg, [key]: digits };
+    setSeg(next);
+    emit(next);
+    if (digits.length === len && nextRef) nextRef.current?.focus();
+  };
+
+  const onArrow = (key) => (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      onChange(stepSegment(value || todayISO(), key, e.key === 'ArrowUp' ? 1 : -1));
+    }
+  };
+
+  return (
+    <div className="date-field input-field">
+      <input className="date-seg" placeholder="DD" inputMode="numeric" maxLength={2} aria-label="Day"
+        value={seg.d} onChange={onType('d', 2, mRef)} onKeyDown={onArrow('d')} />
+      <span className="date-sep">/</span>
+      <input ref={mRef} className="date-seg" placeholder="MM" inputMode="numeric" maxLength={2} aria-label="Month"
+        value={seg.m} onChange={onType('m', 2, yRef)} onKeyDown={onArrow('m')} />
+      <span className="date-sep">/</span>
+      <input ref={yRef} className="date-seg date-seg-year" placeholder="YYYY" inputMode="numeric" maxLength={4} aria-label="Year"
+        value={seg.y} onChange={onType('y', 4, null)} onKeyDown={onArrow('y')} />
+    </div>
+  );
+}
 // Remembers the last date used, so a batch of entries for one day only needs the
 // date set once. Cleared implicitly by defaulting to today on the first entry.
 const LAST_DATE_KEY = 'chavera_last_entry_date';
@@ -648,14 +730,11 @@ export default function ContactForm({ contact, onCancel, onSave, onClose }) {
           <div className="form-grid">
             <div className="form-group">
               <label>Date</label>
-              <input
-                type="date"
-                name="contact_date"
+              <DateField
                 value={formData.contact_date}
-                onChange={handleChange}
-                className="input-field"
+                onChange={(iso) => setFormData(prev => ({ ...prev, contact_date: iso }))}
               />
-              <FieldHint>Defaults to today (or your last entry date). Use ↑ / ↓ to adjust.</FieldHint>
+              <FieldHint>Defaults to today. On any segment use ↑ / ↓ — day rolls into the next month, month past December bumps the year, and the year steps on its own.</FieldHint>
             </div>
 
             <div className="form-group">

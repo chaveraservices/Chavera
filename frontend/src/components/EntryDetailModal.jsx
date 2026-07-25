@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X, Pencil, Tags, Trash2, Phone, MapPin } from 'lucide-react';
+import { X, Pencil, Tags, Trash2, MapPin, Building2 } from 'lucide-react';
 import { printLabels } from '../utils/printLabels';
 import { gradeWithSymbol } from '../utils/contactFields';
 import useBodyScrollLock from '../utils/useBodyScrollLock';
@@ -47,6 +47,10 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
   const name = `${c.honorific ? c.honorific + ' ' : ''}${c.full_name || ''}`.trim();
   const address = [c.door_flat_no, c.street, c.landmark, c.village_town, c.mandal, c.district, c.state, c.pincode]
     .filter(Boolean).join(', ');
+  // Treat the entry as a business when a business name is present and differs
+  // from the person's name — then surface the business label in the header.
+  const businessName = (c.business_name || '').trim();
+  const isBusiness = businessName && businessName.toLowerCase() !== (c.full_name || '').trim().toLowerCase();
 
   const handleLabel = () => {
     const err = printLabels([c]);
@@ -61,8 +65,15 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
           <div className="entry-avatar">{(c.full_name || '?').charAt(0).toUpperCase()}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="entry-modal-name">{name || '—'}</div>
+            {/* When it's a business, show the business name right under the person. */}
+            {isBusiness && (
+              <div className="entry-modal-biz" title={businessName}>
+                <Building2 size={13} /> {businessName}
+              </div>
+            )}
             <div className="entry-modal-sub">
               {c.entry_no != null && <span className="entry-chip">#{c.entry_no}</span>}
+              {isBusiness && <span className="badge dealer">Business</span>}
               {c.category && <span className={`badge ${String(c.category).toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>{c.category}</span>}
               {c.customer_grade && <span className="entry-chip">{gradeWithSymbol(c.customer_grade)}</span>}
             </div>
@@ -105,9 +116,6 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
         {/* Actions. Print Label is the per-entry button asked for; it prints
             exactly this one contact at 75x50mm. */}
         <div className="entry-modal-actions">
-          <a className="entry-action" href={`tel:${c.phone_1}`} title={`Call ${c.phone_1}`}>
-            <Phone size={17} /><span>Call</span>
-          </a>
           <a
             className="entry-action"
             href={`https://maps.google.com/?q=${encodeURIComponent(address)}`}

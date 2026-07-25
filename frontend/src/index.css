@@ -425,6 +425,28 @@ body {
   color: #6B6B68;
 }
 
+/* Segmented DD / MM / YYYY date field (custom, so ↑/↓ can step each segment). */
+.date-field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.date-field:focus-within { border-color: var(--primary-accent); }
+.date-seg {
+  border: none;
+  background: transparent;
+  color: var(--text-dark);
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  padding: 2px 0;
+  width: 2.4ch;
+  text-align: center;
+}
+.date-seg-year { width: 4ch; }
+.date-seg::placeholder { color: #6B6B68; }
+.date-sep { color: var(--text-muted); user-select: none; }
+
 /* Modal */
 .modal-overlay {
   position: fixed;
@@ -1256,6 +1278,19 @@ textarea.input-error-field {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.entry-modal-biz {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .entry-modal-sub { display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
 .entry-chip {
