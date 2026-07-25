@@ -50,14 +50,12 @@ function App() {
     </Suspense>
   );
 
-  // Import is reached from the Entry toolbar, not the nav. Settings is
-  // admin-only; staff get Dashboard + Entry.
+  // Settings lives only in the header user dropdown now, not the nav. Import is
+  // reached from the Entry toolbar. The Dashboard (analytics, DB usage) is an
+  // admin tool, so staff only get the Entry screen in the nav.
   const navItems = [
-    { path: '/dashboard', icon: <LayoutDashboard size={17} />, label: 'Dashboard' },
+    ...(isAdmin ? [{ path: '/dashboard', icon: <LayoutDashboard size={17} />, label: 'Dashboard' }] : []),
     { path: '/', icon: <Users size={17} />, label: 'Entry' },
-    ...(isAdmin ? [
-      { path: '/settings', icon: <Settings size={17} />, label: 'Settings' },
-    ] : []),
   ];
 
   const isActive = (path) => {
@@ -112,7 +110,7 @@ function App() {
           ))}
         </nav>
 
-        <div className="navbar-brand" onClick={() => navigate('/dashboard')} title="Chavera">
+        <div className="navbar-brand" onClick={() => navigate(isAdmin ? '/dashboard' : '/')} title="Chavera">
           <img src="/chavera-logo.png" alt="Chavera" className="navbar-logo" />
         </div>
 
@@ -129,7 +127,10 @@ function App() {
             {/* The entry form is now a modal hosted inside ContactsPage — no
                 separate /form route to navigate to. */}
             <Route path="/" element={<ContactsPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
+            {/* Dashboard is admin-only — staff typing the URL bounce to Entry. */}
+            <Route path="/dashboard" element={
+              <RequireAdmin isAdmin={isAdmin}><DashboardPage /></RequireAdmin>
+            } />
             {/* Settings is open to staff — it self-gates the admin-only tabs and
                 staff still need it to change their own password. */}
             <Route path="/settings" element={<SettingsPage />} />

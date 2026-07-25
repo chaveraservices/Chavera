@@ -10,6 +10,7 @@ export default function CustomSelect({
   name,
   className = "",
   searchable, // undefined => auto (search box shown when the list is long)
+  autoOpen = false, // open the menu on mount (used for the honorific field)
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -18,9 +19,27 @@ export default function CustomSelect({
   const dropdownRef = useRef(null);
   const searchRef = useRef(null);
   const menuRef = useRef(null);
+  // Guards for open-on-focus: a mouse click focuses AND clicks (let the click
+  // toggle, don't also open on the focus); and after a selection the trigger is
+  // re-focused (don't reopen from that).
+  const mouseDownRef = useRef(false);
+  const skipOpenRef = useRef(false);
 
   // Show a search box for long lists (e.g. States/Districts) unless overridden.
   const canSearch = searchable ?? (options.length > 7);
+  // Number shortcuts (press 1–9 to pick an option) only make sense on short,
+  // non-searchable lists — on a searchable list a digit is a search character.
+  const numberKeys = !canSearch;
+
+  // #5: open on mount for the honorific field, so the form starts on it.
+  useEffect(() => {
+    if (autoOpen && !disabled) {
+      setIsOpen(true);
+      const t = setTimeout(() => dropdownRef.current?.querySelector('.custom-select-trigger')?.focus(), 0);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Close on outside click
   useEffect(() => {
@@ -47,8 +66,22 @@ export default function CustomSelect({
     setIsOpen(false);
     setQuery('');
     setActiveIdx(-1);
-    // Return focus to the trigger so Tab continues from the right place.
+    // Return focus to the trigger so Tab continues from the right place, but
+    // don't let open-on-focus reopen the menu we just closed.
+    skipOpenRef.current = true;
     dropdownRef.current?.querySelector('.custom-select-trigger')?.focus();
+  };
+
+  // Open when the trigger gains focus via keyboard (Tab), so dropdowns open by
+  // themselves in the entry flow. A mouse click is handled by onClick instead,
+  // and a post-selection refocus is skipped — see the guard refs above.
+  const openFromFocus = () => {
+    if (disabled) return;
+    if (mouseDownRef.current) { mouseDownRef.current = false; return; }
+    if (skipOpenRef.current) { skipOpenRef.current = false; return; }
+    setIsOpen(true);
+    const cur = options.findIndex(o => o.value === value);
+    setActiveIdx(cur >= 0 ? cur : 0);
   };
 
   const selectedOption = options.find(o => o.value === value);
@@ -115,6 +148,14 @@ export default function CustomSelect({
         setIsOpen(false);
         break;
       default:
+        // #6: number shortcuts — 1..9 selects that option (short lists only).
+        if (numberKeys && /^[1-9]$/.test(e.key)) {
+          const idx = Number(e.key) - 1;
+          if (filtered[idx]) {
+            e.preventDefault(); e.stopPropagation();
+            handleSelect(filtered[idx].value);
+          }
+        }
         break;
     }
   };
@@ -127,7 +168,9 @@ export default function CustomSelect({
     >
       <div
         className="custom-select-trigger"
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onMouseDown={() => { mouseDownRef.current = true; }}
+        onClick={() => { if (!disabled) setIsOpen(o => !o); mouseDownRef.current = false; }}
+        onFocus={openFromFocus}
         tabIndex={disabled ? -1 : 0}
         role="combobox"
         aria-expanded={isOpen}
@@ -166,7 +209,8 @@ export default function CustomSelect({
                 onClick={() => handleSelect(opt.value)}
                 onMouseEnter={() => setActiveIdx(i)}
               >
-                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                {numberKeys && i < 9 && <span className="opt-key">{i + 1}</span>}
+                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>
                   {opt.label}
                 </span>
                 {value === opt.value && <Check size={16} className="check-icon" />}

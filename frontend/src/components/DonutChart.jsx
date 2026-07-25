@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { Table2, PieChart as PieIcon, BarChart3 } from 'lucide-react';
 
 // Categorical slots, validated with the dataviz palette validator against the
 // dark card surface (#1A1A19), all-pairs: worst CVD pair ΔE 6.9 (protan, in the
@@ -9,7 +8,6 @@ import { Table2, PieChart as PieIcon, BarChart3 } from 'lucide-react';
 // four named products; the rest fold into a grey residual.
 const SLICE_COLORS = ['#3987e5', '#008300', '#d55181', '#c98500'];
 const OTHER_COLOR = '#8A8A86';   // residual, not an identity
-const BAR_COLOR = '#3987e5';
 const MAX_SLICES = 4;
 
 const TAU = Math.PI * 2;
@@ -51,7 +49,6 @@ function arcPath(cx, cy, rOuter, rInner, start, end, gap) {
  */
 export default function DonutChart({ data, onSelect, valueNoun = 'selections' }) {
   const [hover, setHover] = useState(null);
-  const [view, setView] = useState('donut');   // donut | bars | table
 
   const sorted = useMemo(
     () => [...(data || [])].sort((a, b) => b.count - a.count),
@@ -118,85 +115,13 @@ export default function DonutChart({ data, onSelect, valueNoun = 'selections' })
 
   return (
     <div>
-      <div className="donut-controls">
-        {/* The "All products" filter dropdown was removed on client request.
-            One dataset, three readings: share, ranked counts, exact values. */}
-        <div className="view-switch" role="group" aria-label="Chart view">
-          {[
-            ['donut', <PieIcon size={14} key="d" />, 'Share'],
-            ['bars', <BarChart3 size={14} key="b" />, 'Ranked'],
-            ['table', <Table2 size={14} key="t" />, 'Table'],
-          ].map(([id, icon, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={`view-switch-btn ${view === id ? 'active' : ''}`}
-              onClick={() => setView(id)}
-              aria-pressed={view === id}
-            >
-              {icon}<span>{label}</span>
-            </button>
-          ))}
-        </div>
-        {onSelect && (
+      {onSelect && (
+        <div className="donut-controls">
           <span className="donut-tip">Click a product for a summary</span>
-        )}
-      </div>
-
-      {view === 'table' ? (
-        <table className="data-table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th style={{ textAlign: 'right' }}>{valueNoun[0].toUpperCase() + valueNoun.slice(1)}</th>
-              <th style={{ textAlign: 'right' }}>Share</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map(d => (
-              <tr
-                key={d.label}
-                onClick={onSelect ? () => onSelect(d.label, { count: d.count, pct: (d.count / sum) * 100 }) : undefined}
-                className={onSelect ? 'row-clickable' : undefined}
-              >
-                <td>{d.label}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.count}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  {((d.count / sum) * 100).toFixed(1)}%
-                </td>
-              </tr>
-            ))}
-            <tr style={{ fontWeight: 600 }}>
-              <td>Total</td>
-              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{sum}</td>
-              <td style={{ textAlign: 'right' }}>100%</td>
-            </tr>
-          </tbody>
-        </table>
-      ) : view === 'bars' ? (
-        <div className="donut-bars">
-          {sorted.map(d => {
-            const max = Math.max(...sorted.map(x => x.count), 1);
-            return (
-              <div
-                key={d.label}
-                className="bar-row"
-                onClick={onSelect ? () => onSelect(d.label, { count: d.count, pct: (d.count / sum) * 100 }) : undefined}
-                style={{ cursor: onSelect ? 'pointer' : 'default' }}
-                title={`${d.label}: ${d.count}`}
-              >
-                <div className="bar-label">{d.label}</div>
-                <div className="bar-track">
-                  <div className="bar-fill" style={{ width: `${(d.count / max) * 100}%`, background: BAR_COLOR }} />
-                </div>
-                <div className="bar-count">{d.count}</div>
-                <div className="bar-pct">{((d.count / sum) * 100).toFixed(1)}%</div>
-              </div>
-            );
-          })}
         </div>
-      ) : (
-        <div style={{ display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
+      )}
+
+      <div style={{ display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <svg width={SIZE} height={SIZE} role="img"
               aria-label={`Donut chart of ${valueNoun} by product. ${arcs.map(s => `${s.label} ${s.pct.toFixed(1)} percent`).join(', ')}.`}>
@@ -264,7 +189,6 @@ export default function DonutChart({ data, onSelect, valueNoun = 'selections' })
             )}
           </div>
         </div>
-      )}
     </div>
   );
 }

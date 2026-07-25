@@ -9,7 +9,10 @@ export const labelHtml = (contacts) => {
   const labels = contacts.map(c => {
     const name = (c.honorific ? c.honorific + ' ' : '') + (c.full_name || '');
     const address = [c.door_flat_no, c.street, c.village_town, c.district, c.state, c.pincode].filter(Boolean).join(', ');
-    const phone = [c.phone_1, c.phone_2].filter(Boolean).join(' / ');
+    // All numbers: phone_1 + the phones[] array (falling back to phone_2), each +91.
+    const nums = [c.phone_1, ...(Array.isArray(c.phones) && c.phones.length ? c.phones : (c.phone_2 ? [c.phone_2] : []))]
+      .filter(Boolean).map(n => `+91 ${n}`);
+    const phone = nums.join(' / ');
     return `<div class="label">
       <div class="lname">${esc(name)}</div>
       <div class="laddr">${esc(address)}</div>

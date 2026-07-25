@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Lock, CheckCircle } from 'lucide-react';
+import { Lock, CheckCircle, X } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import UserAccessPanel from '../components/UserAccessPanel';
 import ProductManager from '../components/ProductManager';
 
-function Section({ title, children }) {
+function Section({ title, action, children }) {
   return (
     <div className="form-section" style={{ marginBottom: 24 }}>
-      <div className="form-section-title">{title}</div>
+      <div className="form-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <span>{title}</span>
+        {action}
+      </div>
       {children}
     </div>
   );
@@ -23,6 +26,7 @@ export default function SettingsPage() {
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
+  const [showPwModal, setShowPwModal] = useState(false);
 
   const [dbStats, setDbStats] = useState(null);
   const [dbStatsLoading, setDbStatsLoading] = useState(false);
@@ -32,9 +36,13 @@ export default function SettingsPage() {
   const [keepAliveLoading, setKeepAliveLoading] = useState(false);
 
   useEffect(() => {
+    // These are admin-only endpoints; staff would get a 403. Only the admin
+    // sees the DB-stats and keep-alive panels, so only the admin fetches them.
+    if (!isAdmin) return;
     fetchDbStats();
     fetchKeepAliveStatus();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
   const fetchKeepAliveStatus = async () => {
     try {
@@ -88,6 +96,7 @@ export default function SettingsPage() {
       await api.post('/user/change-password', { currentPassword: pwData.currentPassword, newPassword: pwData.newPassword });
       setPwSuccess('Password changed successfully!');
       setPwData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => { setShowPwModal(false); setPwSuccess(''); }, 1200);
     } catch (err) {
       setPwError(err.response?.data?.message || 'Failed to change password. Check your current password.');
     } finally { setPwLoading(false); }
@@ -95,16 +104,18 @@ export default function SettingsPage() {
 
 
   return (
-    <div className="page-container" style={{ paddingTop: 32, maxWidth: 1200 }}>
-      <div className="form-header-flex">
+    <div className="page-container settings-page" style={{ paddingTop: 20, maxWidth: 1320 }}>
+      <div className="form-header-flex" style={{ marginBottom: 12 }}>
         <h1>Settings</h1>
       </div>
 
-      {/* One page, two columns so it packs onto ~one screen without tabs. The
-          long lists (users, products) scroll inside their own panels, so they
-          can't stretch the page into a long scroll. */}
+      {/* One page, three columns so everything packs onto a single screen
+          without tabs or page scroll. The long lists (users, products) scroll
+          inside their own panels, so they can't stretch the page. */}
       <div className="settings-cols">
       <div className="settings-col">
+      {/* Profile holds identity plus the two account actions (password change,
+          keep-alive) so the whole left column is one compact card. */}
       <Section title="PROFILE">
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <div style={{
@@ -123,53 +134,32 @@ export default function SettingsPage() {
             </span>
           </div>
         </div>
-      </Section>
 
-      {/* Change Password */}
-      <Section title="SECURITY — CHANGE PASSWORD">
-        <form onSubmit={handleChangePassword}>
-          {pwError && <div style={{ padding: '10px 14px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{pwError}</div>}
-          {pwSuccess && (
-            <div style={{ padding: '10px 14px', background: '#12301F', color: '#34D399', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CheckCircle size={16} /> {pwSuccess}
-            </div>
-          )}
-          {/* Single column so the three fields read top-to-bottom in the order
-              you fill them, instead of scattering across a 2-col grid. */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div className="form-group">
-              <label>Current Password</label>
-              <input type="password" name="currentPassword" value={pwData.currentPassword} onChange={handlePwChange} className="input-field" placeholder="Enter current password" required />
-            </div>
-            <div className="form-group">
-              <label>New Password</label>
-              <input type="password" name="newPassword" value={pwData.newPassword} onChange={handlePwChange} className="input-field" placeholder="Min. 6 characters" required />
-            </div>
-            <div className="form-group">
-              <label>Confirm New Password</label>
-              <input type="password" name="confirmPassword" value={pwData.confirmPassword} onChange={handlePwChange} className="input-field" placeholder="Re-enter new password" required />
-            </div>
+        {/* Password */}
+        <div className="profile-row">
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 3 }}>Password</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Change your account password.</div>
           </div>
-          <button type="submit" className="btn btn-primary" style={{ marginTop: 20 }} disabled={pwLoading}>
-            <Lock size={16} /> {pwLoading ? 'Updating…' : 'Update Password'}
+          <button type="button" className="btn btn-primary" style={{ flexShrink: 0 }}
+            onClick={() => { setShowPwModal(true); setPwError(''); setPwSuccess(''); }}>
+            <Lock size={16} /> Change
           </button>
-        </form>
-      </Section>
+        </div>
 
-      {/* Server Preferences */}
-      {isAdmin && (
-      <Section title="SERVER SETTINGS">
-        <div className="form-group" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
-          <div>
-            <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 4 }}>14-Minute Keep-Alive</div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Prevent the server from sleeping due to inactivity. (Always ON in Production)</div>
+        {/* 14-Minute Keep-Alive (admin only) */}
+        {isAdmin && (
+        <div className="profile-row">
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 3 }}>14-Minute Keep-Alive</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Keeps the server awake during inactivity. (Always ON in Production)</div>
           </div>
-          <button 
+          <button
             type="button"
-            onClick={toggleKeepAlive} 
+            onClick={toggleKeepAlive}
             disabled={keepAliveLoading}
             style={{
-              position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none', cursor: keepAliveLoading ? 'wait' : 'pointer',
+              position: 'relative', width: 44, height: 24, borderRadius: 12, border: 'none', flexShrink: 0, cursor: keepAliveLoading ? 'wait' : 'pointer',
               background: keepAliveEnabled ? '#10b981' : '#cbd5e1', transition: 'background 0.3s'
             }}
           >
@@ -179,32 +169,22 @@ export default function SettingsPage() {
             }} />
           </button>
         </div>
+        )}
       </Section>
-      )}
-      </div>
 
-      {/* Right column — the taller admin panels. */}
+      {/* Database Storage sits right under the profile in the left column. */}
       {isAdmin && (
-      <div className="settings-col">
-      <Section title="USER ACCESS &amp; ROLES">
-        <UserAccessPanel />
-      </Section>
-
-      <Section title="PRODUCTS">
-        <ProductManager />
-      </Section>
-
-      {/* Database Monitoring */}
-      <Section title="DATABASE STORAGE MONITORING">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Real-time MongoDB storage metrics</span>
-          <button className="btn" onClick={fetchDbStats} disabled={dbStatsLoading} style={{ padding: '6px 12px', fontSize: '0.85rem', border: '1px solid var(--border-color)', background: 'var(--bg-white)' }}>
-            {dbStatsLoading ? 'Refreshing...' : 'Refresh Stats'}
+      <Section
+        title="DATABASE STORAGE"
+        action={
+          <button className="btn" onClick={fetchDbStats} disabled={dbStatsLoading}
+            style={{ padding: '5px 10px', fontSize: '0.8rem', fontWeight: 600, textTransform: 'none', letterSpacing: 'normal', border: '1px solid var(--border-color)', background: 'var(--bg-white)' }}>
+            {dbStatsLoading ? 'Refreshing…' : 'Refresh'}
           </button>
-        </div>
-        
-        {dbStatsError && <div style={{ padding: '10px 14px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{dbStatsError}</div>}
-        
+        }
+      >
+        {dbStatsError &&<div style={{ padding: '8px 12px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: 8, marginBottom: 12, fontSize: '0.85rem' }}>{dbStatsError}</div>}
+
         {dbStats && (() => {
           const maxBytes = 512 * 1024 * 1024;
           const usedBytes = dbStats.storageSize !== undefined ? (dbStats.storageSize + (dbStats.indexSize || 0)) : 0;
@@ -214,67 +194,112 @@ export default function SettingsPage() {
             if (percent > 75) return 'linear-gradient(90deg, #f59e0b, #fbbf24)';
             return 'linear-gradient(90deg, #10b981, #34d399)';
           };
+          const metrics = [
+            ['Database', dbStats.dbName],
+            ['Collections', dbStats.collections],
+            ['Documents', dbStats.objects],
+            ['Data Size', formatMB(dbStats.dataSize)],
+            ['Storage Size', formatMB(dbStats.storageSize)],
+            ['Index Size', formatMB(dbStats.indexSize)],
+          ];
 
           return (
             <>
-              <div className="form-grid">
-                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Database Name</label>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.dbName}</div>
-                </div>
-                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Total Collections</label>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.collections}</div>
-                </div>
-                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Total Documents</label>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{dbStats.objects}</div>
-                </div>
-                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Data Size</label>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.dataSize)}</div>
-                </div>
-                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Storage Size</label>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.storageSize)}</div>
-                </div>
-                <div className="form-group" style={{ background: 'var(--bg-main)', padding: 16, borderRadius: 8, border: '1px solid var(--border-color)' }}>
-                  <label style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Index Size</label>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(dbStats.indexSize)}</div>
-                </div>
-              </div>
-
               {dbStats.storageSize !== undefined && (
-                <div style={{ marginTop: 16, padding: '20px 24px', background: 'var(--bg-white)', borderRadius: 12, border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>Atlas Free Tier Usage</span>
+                <div style={{ padding: 14, background: 'var(--bg-main)', borderRadius: 10, border: '1px solid var(--border-color)', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.85rem' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>Atlas Free Tier</span>
                     <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{formatMB(usedBytes)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ 512 MB</span></span>
                   </div>
-                  
-                  <div style={{ width: '100%', height: 12, background: '#232322', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
-                    <div style={{ 
-                      position: 'absolute',
-                      top: 0, left: 0, bottom: 0,
-                      width: `${usedPercent}%`, 
-                      background: getProgressColor(usedPercent),
-                      borderRadius: 6,
-                      transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
-                    }} />
+                  <div style={{ width: '100%', height: 10, background: '#232322', borderRadius: 5, overflow: 'hidden', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${usedPercent}%`, background: getProgressColor(usedPercent), borderRadius: 5, transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
                   </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontSize: '0.9rem' }}>
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{usedPercent.toFixed(2)}% Used</span>
-                    <span style={{ color: '#34D399', fontWeight: 600 }}>{formatMB(maxBytes - usedBytes)} Available</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: '0.8rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{usedPercent.toFixed(1)}% used</span>
+                    <span style={{ color: '#34D399', fontWeight: 600 }}>{formatMB(maxBytes - usedBytes)} free</span>
                   </div>
                 </div>
               )}
+
+              <div className="db-metric-grid">
+                {metrics.map(([label, value]) => (
+                  <div key={label} className="db-metric">
+                    <span className="db-metric-label">{label}</span>
+                    <span className="db-metric-value">{value}</span>
+                  </div>
+                ))}
+              </div>
             </>
           );
         })()}
       </Section>
+      )}
+      </div>
+
+      {/* Middle column — user access. */}
+      {isAdmin && (
+      <div className="settings-col">
+      <Section title="USER ACCESS &amp; ROLES">
+        <UserAccessPanel />
+      </Section>
+      </div>
+      )}
+
+      {/* Right column — products. */}
+      {isAdmin && (
+      <div className="settings-col">
+      <Section title="PRODUCTS">
+        <ProductManager />
+      </Section>
       </div>
       )}
       </div>
+
+      {/* Change Password modal */}
+      {showPwModal && (
+        <div className="modal-overlay" style={{ zIndex: 320 }} onClick={() => setShowPwModal(false)}>
+          <div className="entry-modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+            <div className="entry-modal-head">
+              <div style={{ flex: 1 }}>
+                <div className="entry-modal-name">Change password</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3 }}>You stay signed in after changing it.</div>
+              </div>
+              <button type="button" className="entry-icon-btn" onClick={() => setShowPwModal(false)}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleChangePassword} style={{ padding: 20 }}>
+              {pwError && <div style={{ padding: '10px 14px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem' }}>{pwError}</div>}
+              {pwSuccess && (
+                <div style={{ padding: '10px 14px', background: '#12301F', color: '#34D399', borderRadius: 8, marginBottom: 16, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle size={16} /> {pwSuccess}
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="form-group">
+                  <label>Current Password</label>
+                  <input type="password" name="currentPassword" value={pwData.currentPassword} onChange={handlePwChange} className="input-field" placeholder="Enter current password" autoFocus required />
+                </div>
+                <div className="form-group">
+                  <label>New Password</label>
+                  <input type="password" name="newPassword" value={pwData.newPassword} onChange={handlePwChange} className="input-field" placeholder="Min. 6 characters" required />
+                </div>
+                <div className="form-group">
+                  <label>Confirm New Password</label>
+                  <input type="password" name="confirmPassword" value={pwData.confirmPassword} onChange={handlePwChange} className="input-field" placeholder="Re-enter new password" required />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+                <button type="button" className="btn" onClick={() => setShowPwModal(false)}
+                  style={{ flex: 1, justifyContent: 'center', border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={pwLoading}>
+                  <Lock size={16} /> {pwLoading ? 'Updating…' : 'Update'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { X, Pencil, Tags, Trash2, Phone, MapPin } from 'lucide-react';
 import { printLabels } from '../utils/printLabels';
+import { gradeWithSymbol } from '../utils/contactFields';
 import useBodyScrollLock from '../utils/useBodyScrollLock';
 
 const fmtDate = (d) => {
@@ -63,7 +64,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
             <div className="entry-modal-sub">
               {c.entry_no != null && <span className="entry-chip">#{c.entry_no}</span>}
               {c.category && <span className={`badge ${String(c.category).toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>{c.category}</span>}
-              {c.customer_grade && <span className="entry-chip">{c.customer_grade}</span>}
+              {c.customer_grade && <span className="entry-chip">{gradeWithSymbol(c.customer_grade)}</span>}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 4 }}>
@@ -81,10 +82,13 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
         <div className="entry-modal-body">
           <Row label="Entry No" value={c.entry_no != null ? `#${c.entry_no}` : null} />
           <Row label="Date" value={fmtDate(c.contact_date || c.createdAt)} />
+          <Row label="Entered by" value={c.created_by_name} />
           <Row label="Business" value={c.business_name} />
           <Row label="Products" value={c.products} accent />
-          <Row label="Phone 1" value={c.phone_1} />
-          <Row label="Phone 2" value={c.phone_2} />
+          <Row label="Phone 1" value={c.phone_1 ? `+91 ${c.phone_1}` : null} />
+          {/* Additional numbers: prefer the phones[] array, fall back to phone_2. */}
+          {(Array.isArray(c.phones) && c.phones.length ? c.phones : (c.phone_2 ? [c.phone_2] : []))
+            .map((num, i) => <Row key={i} label={`Phone ${i + 2}`} value={`+91 ${num}`} />)}
           <Row label="Address" value={address} />
           <Row label="Village / Town" value={c.village_town} />
           <Row label="District" value={c.district} />
@@ -93,7 +97,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
           {c.age && <Row label="Age" value={c.age} />}
           <Row label="Type of House" value={c.house_type} />
           <Row label="Type of Purchase" value={c.purchase_type} />
-          <Row label="Customer Grade" value={c.customer_grade} />
+          <Row label="Customer Grade" value={c.customer_grade ? gradeWithSymbol(c.customer_grade) : null} />
           <Row label="Instagram" value={c.instagram_id} />
           {c.notes && <Row label="Notes" value={c.notes} />}
         </div>

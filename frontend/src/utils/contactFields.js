@@ -15,6 +15,12 @@ export const PRODUCT_OPTIONS = [
 ];
 
 export const CUSTOMER_GRADES = ['Low Potential', 'Potential', 'High Potential'];
+
+// Symbol shown next to each customer grade everywhere it appears:
+// δ (low) · π (potential) · Δ (high). Small-vs-capital delta reads as the level.
+export const GRADE_SYMBOLS = { 'Low Potential': 'δ', 'Potential': 'π', 'High Potential': 'Δ' };
+export const gradeSymbol = (g) => GRADE_SYMBOLS[g] || '';
+export const gradeWithSymbol = (g) => (g && GRADE_SYMBOLS[g] ? `${GRADE_SYMBOLS[g]} ${g}` : (g || ''));
 export const HOUSE_TYPES = ['Own', 'Rented'];
 export const PURCHASE_TYPES = ['Finance', 'Cash'];
 export const CATEGORY_OPTIONS = ['DEALER', 'CUSTOMER'];

@@ -24,7 +24,8 @@ const contactSchema = new mongoose.Schema({
     state: { type: String, default: null },
     pincode: { type: String, default: null },
     phone_1: { type: String, required: true },
-    phone_2: { type: String, default: null },
+    phone_2: { type: String, default: null },     // kept for back-compat; = phones[0]
+    phones: { type: [String], default: [] },      // additional numbers beyond phone_1
     category: { type: String, default: null },
     // Client-requested classification fields
     customer_grade: { type: String, default: null },   // Low Potential | Potential | High Potential
@@ -32,7 +33,11 @@ const contactSchema = new mongoose.Schema({
     purchase_type: { type: String, default: null },    // Finance | Cash
     products: { type: [String], default: [] },         // Cot, Mattresses, Sofa set, …
     contact_date: { type: Date, default: null },       // manually entered date (createdAt is the auto date)
-    notes: { type: String, default: null }
+    notes: { type: String, default: null },
+    // Who created the entry. created_by_name is a snapshot so the entry still
+    // shows an author even if that user is later renamed or removed.
+    created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    created_by_name: { type: String, default: null }
 }, {
     timestamps: true
 });

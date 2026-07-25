@@ -49,7 +49,7 @@ export default class UserController {
     // ---- User access management (admin only; routes enforce the role) ----
 
     async list(req, res, next) {
-        const users = await User.find({}, 'name email role createdAt').sort({ createdAt: 1 }).lean();
+        const users = await User.find({}, 'name email role createdAt lastActivityAt').sort({ createdAt: 1 }).lean();
         res.locals.data = users.map(u => ({ ...u, role: u.role || 'admin' }));
         res.locals.message = 'Users fetched successfully';
         next();

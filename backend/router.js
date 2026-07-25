@@ -71,6 +71,7 @@ router.post('/contact/list', auth, h(contact, 'getAll'), responsedata);
 router.post('/contact/filter-options', auth, h(contact, 'getFilterOptions'), responsedata);
 router.post('/contact/analytics', auth, h(contact, 'getAnalytics'), responsedata);
 router.post('/contact/town-suggestions', auth, h(contact, 'getTownSuggestions'), responsedata);
+router.post('/contact/pincode-suggestion', auth, h(contact, 'getPincodeSuggestion'), responsedata);
 router.post('/contact/get', auth, h(contact, 'getById'), responsedata);
 
 export default router;

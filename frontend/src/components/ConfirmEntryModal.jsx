@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Pencil, Check, X } from 'lucide-react';
 import useBodyScrollLock from '../utils/useBodyScrollLock';
+import { gradeWithSymbol } from '../utils/contactFields';
 
 const fmtDate = (d) => {
   if (!d) return null;
@@ -15,11 +16,12 @@ const fmtDate = (d) => {
 const FIELDS = [
   ['Name', c => `${c.honorific ? c.honorific + ' ' : ''}${c.full_name || ''}`.trim()],
   ['Business', c => c.business_name],
-  ['Phone 1', c => c.phone_1],
-  ['Phone 2', c => c.phone_2],
+  ['Phone 1', c => c.phone_1 ? `+91 ${c.phone_1}` : ''],
+  ['Other Numbers', c => (Array.isArray(c.phones) && c.phones.length ? c.phones : (c.phone_2 ? [c.phone_2] : []))
+    .filter(Boolean).map(n => `+91 ${n}`).join(', ')],
   ['Age', c => c.age],
   ['Category', c => c.category],
-  ['Customer Grade', c => c.customer_grade],
+  ['Customer Grade', c => gradeWithSymbol(c.customer_grade)],
   ['Type of House', c => c.house_type],
   ['Type of Purchase', c => c.purchase_type],
   ['Products', c => (Array.isArray(c.products) && c.products.length ? c.products.join(', ') : '')],

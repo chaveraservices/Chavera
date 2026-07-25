@@ -28,6 +28,23 @@ export default function ContactsPage() {
   const openNew = () => setFormState({ open: true, contact: null });
   const openEdit = (c) => setFormState({ open: true, contact: c });
   const closeForm = () => setFormState({ open: false, contact: null });
+
+  // #4: press Space anywhere on the Entry screen to start a new entry — as long
+  // as you're not typing in a field and nothing is already open on top.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+      if (formState.open || detailContact) return;                 // already in a modal
+      const el = document.activeElement;
+      const tag = (el?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable) return;
+      if (el?.closest?.('[role="combobox"], [role="dialog"]')) return; // in a dropdown/modal
+      e.preventDefault();
+      openNew();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [formState.open, detailContact]);
   const filterPanelRef = useRef(null);
   const filterBtnRef = useRef(null);
 
@@ -113,7 +130,9 @@ export default function ContactsPage() {
       const v = searchParams.get(key);
       if (v) { setter(v); applied = true; }
     }
-    if (applied) setShowMoreFilters(true);
+    // Filters from a drill-down are applied, but the panel stays CLOSED —
+    // arriving from the pie chart shouldn't dump you into an open filter panel.
+    void applied;
     // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

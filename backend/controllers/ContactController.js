@@ -1,10 +1,47 @@
 import Contact from '../models/Contact.js';
+import User from '../models/User.js';
 import ApiError from '../utils/ApiError.js';
 
 const REQUIRED_MSG = 'Missing required fields: full_name, village_town, or phone_1';
 
 // Escape user input before using it inside a RegExp.
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// India Post pincode lookup by place name via the free, no-auth
+// api.postalpincode.in directory. Returns a 6-digit pincode string, or null.
+// Cached in-process (place names repeat a lot) and time-limited so a slow or
+// down API never hangs the request — it just falls back to learned data.
+const pincodeCache = new Map();
+const lookupIndiaPost = async (town, district, state) => {
+    const key = `${town}|${district || ''}|${state || ''}`.toLowerCase();
+    if (pincodeCache.has(key)) return pincodeCache.get(key);
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    try {
+        const res = await fetch(`https://api.postalpincode.in/postoffice/${encodeURIComponent(town)}`, { signal: ctrl.signal });
+        const body = await res.json();
+        const entry = Array.isArray(body) ? body[0] : null;
+        let offices = entry && entry.Status === 'Success' && Array.isArray(entry.PostOffice) ? entry.PostOffice : [];
+
+        // Narrow to the chosen district, then state — but only if that leaves a
+        // match, so a mismatch in one field doesn't discard a valid result.
+        if (district) {
+            const d = offices.filter(o => (o.District || '').toLowerCase() === String(district).toLowerCase());
+            if (d.length) offices = d;
+        }
+        if (state) {
+            const s = offices.filter(o => (o.State || '').toLowerCase() === String(state).toLowerCase());
+            if (s.length) offices = s;
+        }
+
+        const pin = offices[0]?.Pincode || null;
+        pincodeCache.set(key, pin);
+        return pin;
+    } finally {
+        clearTimeout(timer);
+    }
+};
 
 // A contact's effective date for range filtering: the manually entered
 // contact_date, falling back to when the record was created. Contacts imported
@@ -196,6 +233,39 @@ export default class ContactController {
         next();
     }
 
+    // Auto-fill a pincode for a village/town. Two sources, in order:
+    //   1. India Post (api.postalpincode.in) — the official directory, covers
+    //      real towns and cities. Free, no key.
+    //   2. What's already been entered here — covers the tiny villages India
+    //      Post doesn't list, once a pincode has been recorded for them once.
+    async getPincodeSuggestion(req, res, next) {
+        const { village_town, district, state } = req.body || {};
+        const town = String(village_town || '').trim();
+        if (!town) { res.locals.data = { pincode: null }; return next(); }
+
+        // 1. India Post lookup by place name, narrowed by district then state.
+        try {
+            const pin = await lookupIndiaPost(town, district, state);
+            if (pin) { res.locals.data = { pincode: pin, source: 'indiapost' }; res.locals.message = 'Pincode found'; return next(); }
+        } catch { /* fall through to history */ }
+
+        // 2. Learned from previous entries for the same place.
+        const esc = escapeRegex(town);
+        const match = { village_town: new RegExp(`^${esc}$`, 'i'), pincode: { $nin: [null, ''] } };
+        if (district) match.district = String(district);
+        if (state) match.state = String(state);
+        const rows = await Contact.aggregate([
+            { $match: match },
+            { $group: { _id: '$pincode', n: { $sum: 1 } } },
+            { $sort: { n: -1 } },
+            { $limit: 1 },
+        ]);
+
+        res.locals.data = { pincode: rows[0]?._id || null, source: rows[0]?._id ? 'history' : null };
+        res.locals.message = 'Pincode suggestion fetched successfully';
+        next();
+    }
+
     async getById(req, res, next) {
         const { id } = req.body;
         if (!id) throw new ApiError(400, 'Contact ID is required');
@@ -209,7 +279,7 @@ export default class ContactController {
     }
 
     async insert(req, res, next) {
-        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, category, customer_grade, house_type, purchase_type, products, contact_date, notes } = req.body;
+        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, phones, category, customer_grade, house_type, purchase_type, products, contact_date, notes } = req.body;
 
         // Trim required string fields before validation
         full_name = (full_name || '').trim();
@@ -224,18 +294,30 @@ export default class ContactController {
         if (!/^\d{10}$/.test(phone_1)) {
             throw new ApiError(400, 'phone_1 must be exactly 10 digits');
         }
-        if (phone_2 && !/^\d{10}$/.test(phone_2.toString().trim())) {
-            throw new ApiError(400, 'phone_2 must be exactly 10 digits');
+        // Additional numbers: normalise to a clean 10-digit array.
+        const cleanPhones = (Array.isArray(phones) ? phones : [])
+            .map(p => String(p || '').trim())
+            .filter(Boolean);
+        for (const p of cleanPhones) {
+            if (!/^\d{10}$/.test(p)) throw new ApiError(400, 'Each additional number must be exactly 10 digits');
         }
+        // Keep phone_2 = first extra for back-compat with labels/export.
+        const secondPhone = cleanPhones[0] || (phone_2 ? String(phone_2).trim() : null);
+
+        // Snapshot the author's name so the entry keeps it even if the user is
+        // later renamed or removed. The JWT carries no name, so read it once.
+        const creator = req.user?.id ? await User.findById(req.user.id).select('name').lean() : null;
 
         const newContact = new Contact({
             entry_no: await nextEntryNo(),
             honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark,
-            village_town, mandal, district, state, pincode, phone_1, phone_2, category,
+            village_town, mandal, district, state, pincode, phone_1, phone_2: secondPhone, phones: cleanPhones, category,
             customer_grade, house_type, purchase_type,
             products: Array.isArray(products) ? products : (products ? [products] : []),
             contact_date: contact_date || null,
-            notes
+            notes,
+            created_by: req.user?.id || null,
+            created_by_name: creator?.name || null
         });
 
         await newContact.save();
@@ -272,7 +354,12 @@ export default class ContactController {
         // Number the batch from the current high-water mark so imported rows
         // get readable entry numbers too, contiguous with what's already there.
         let seq = await nextEntryNo();
-        for (const c of valid) c.entry_no = seq++;
+        const importer = req.user?.id ? await User.findById(req.user.id).select('name').lean() : null;
+        for (const c of valid) {
+            c.entry_no = seq++;
+            c.created_by = req.user?.id || null;
+            c.created_by_name = importer?.name || null;
+        }
 
         // ordered:false keeps inserting past individual failures.
         const inserted = await Contact.insertMany(valid, { ordered: false });
@@ -296,7 +383,17 @@ export default class ContactController {
                 throw new ApiError(400, 'Phone 1 must be exactly 10 digits');
             }
         }
-        if (updates.phone_2 !== undefined && updates.phone_2 !== null && updates.phone_2 !== '') {
+        // Additional numbers array: clean, validate, and keep phone_2 in sync.
+        if (updates.phones !== undefined) {
+            const cleanPhones = (Array.isArray(updates.phones) ? updates.phones : [])
+                .map(p => String(p || '').trim())
+                .filter(Boolean);
+            for (const p of cleanPhones) {
+                if (!/^\d{10}$/.test(p)) throw new ApiError(400, 'Each additional number must be exactly 10 digits');
+            }
+            updates.phones = cleanPhones;
+            updates.phone_2 = cleanPhones[0] || null;
+        } else if (updates.phone_2 !== undefined && updates.phone_2 !== null && updates.phone_2 !== '') {
             if (!/^\d{10}$/.test(updates.phone_2)) {
                 throw new ApiError(400, 'Phone 2 must be exactly 10 digits');
             }
