@@ -1473,9 +1473,8 @@ html.modal-open .main-content {
   flex-direction: column;
   gap: 8px;
   margin-top: 14px;
-  max-height: 300px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  /* No overflow clip here: a clipped list would cut off the role dropdown and
+     force scrolling inside the panel. The list stays short (few users). */
 }
 .access-row {
   display: flex;
@@ -1498,10 +1497,12 @@ html.modal-open .main-content {
 }
 .access-avatar.is-admin { background: var(--highlight); color: var(--accent-text); }
 .access-name {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; min-width: 0;
   font-size: 0.92rem; font-weight: 600; color: var(--text-dark);
 }
+.access-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .access-you {
+  flex-shrink: 0;
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--highlight);
@@ -1518,8 +1519,9 @@ html.modal-open .main-content {
 }
 /* The name/email block is a button that opens the user's detail card. */
 .access-identity {
-  flex: 1;
+  flex: 1 1 150px;
   min-width: 0;
+  overflow: hidden;
   text-align: left;
   background: none;
   border: none;
@@ -1527,7 +1529,17 @@ html.modal-open .main-content {
   cursor: pointer;
   border-radius: 6px;
 }
-.access-identity:hover .access-name { text-decoration: underline; }
+.access-identity:hover .access-name-text { text-decoration: underline; }
+
+/* Role select + row actions grouped so they wrap together under the identity
+   on a narrow column instead of overlapping it. */
+.access-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .access-role-select { width: 140px; flex-shrink: 0; }
 
 .access-legend {
@@ -1862,7 +1874,10 @@ html.modal-open .main-content {
    scroll. Columns top-align; each is a controlled stack (not ragged masonry). */
 .settings-cols {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Middle column (User Access) gets extra width so each user row — avatar,
+     name/email, role select and actions — sits on a single line. Products
+     stays as the third column. */
+  grid-template-columns: 0.85fr 1.3fr 0.9fr;
   gap: 0 20px;
   align-items: start;
 }
@@ -1878,7 +1893,6 @@ html.modal-open .main-content {
    inside their own panels instead of stretching the page. */
 .settings-page .form-section { padding: 16px; margin-bottom: 16px !important; }
 .settings-page .form-section-title { margin-bottom: 12px; }
-.settings-page .access-list { max-height: 300px; overflow-y: auto; }
 .settings-page .prodmgr-list { max-height: 232px; overflow-y: auto; }
 
 /* Divider rows stacked inside the Profile card (password, keep-alive). */

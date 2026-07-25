@@ -3,7 +3,7 @@ import { X, Plus } from 'lucide-react';
 import CustomSelect from './CustomSelect';
 import ConfirmEntryModal from './ConfirmEntryModal';
 import api from '../utils/api';
-import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, gradeSymbol } from '../utils/contactFields';
+import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, gradeSymbol, GRADE_LEGEND } from '../utils/contactFields';
 
 // Local YYYY-MM-DD (native date input format), never UTC-shifted.
 const todayISO = () => {
@@ -666,10 +666,11 @@ export default function ContactForm({ contact, onCancel, onSave, onClose }) {
                 onChange={handleSelectChange}
                 options={[
                   { label: 'None', value: '' },
-                  ...CUSTOMER_GRADES.map(g => ({ label: `${gradeSymbol(g)}  ${g}`, value: g })),
+                  ...CUSTOMER_GRADES.map(g => ({ label: gradeSymbol(g), value: g })),
                 ]}
                 placeholder="Select grade"
               />
+              <FieldHint>{GRADE_LEGEND}</FieldHint>
             </div>
 
             <div className="form-group">

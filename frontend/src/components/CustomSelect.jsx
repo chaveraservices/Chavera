@@ -11,6 +11,7 @@ export default function CustomSelect({
   className = "",
   searchable, // undefined => auto (search box shown when the list is long)
   autoOpen = false, // open the menu on mount (used for the honorific field)
+  advanceOnSelect = true, // after a keyboard pick, jump to the next form field
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -61,7 +62,7 @@ export default function CustomSelect({
     if (!isOpen) { setQuery(''); setActiveIdx(-1); }
   }, [isOpen, canSearch]);
 
-  const handleSelect = (val) => {
+  const handleSelect = (val, { advance = false } = {}) => {
     if (onChange) onChange({ target: { name, value: val } });
     setIsOpen(false);
     setQuery('');
@@ -69,7 +70,19 @@ export default function CustomSelect({
     // Return focus to the trigger so Tab continues from the right place, but
     // don't let open-on-focus reopen the menu we just closed.
     skipOpenRef.current = true;
-    dropdownRef.current?.querySelector('.custom-select-trigger')?.focus();
+    const trigger = dropdownRef.current?.querySelector('.custom-select-trigger');
+    trigger?.focus();
+
+    // Keyboard pick: mirror the form's Enter-advances-field behaviour by moving
+    // focus to the next field (which, if it's a dropdown, opens on focus).
+    if (advance && advanceOnSelect && trigger) {
+      const scope = trigger.closest('form') || document;
+      const focusables = Array.from(
+        scope.querySelectorAll('input, select, textarea, [data-kbd-focusable]')
+      ).filter(n => !n.disabled && n.tabIndex !== -1 && n.offsetParent !== null);
+      const idx = focusables.indexOf(trigger);
+      if (idx >= 0 && idx < focusables.length - 1) focusables[idx + 1].focus();
+    }
   };
 
   // Open when the trigger gains focus via keyboard (Tab), so dropdowns open by
@@ -136,7 +149,7 @@ export default function CustomSelect({
         break;
       case 'Enter':
         e.preventDefault(); e.stopPropagation();
-        if (activeIdx >= 0 && filtered[activeIdx]) handleSelect(filtered[activeIdx].value);
+        if (activeIdx >= 0 && filtered[activeIdx]) handleSelect(filtered[activeIdx].value, { advance: true });
         else setIsOpen(false);
         break;
       case 'Escape':
@@ -153,7 +166,7 @@ export default function CustomSelect({
           const idx = Number(e.key) - 1;
           if (filtered[idx]) {
             e.preventDefault(); e.stopPropagation();
-            handleSelect(filtered[idx].value);
+            handleSelect(filtered[idx].value, { advance: true });
           }
         }
         break;

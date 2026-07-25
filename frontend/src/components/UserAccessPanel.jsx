@@ -168,31 +168,34 @@ export default function UserAccessPanel() {
 
                 <button type="button" className="access-identity" onClick={() => setDetailUser(u)} title="View details">
                   <div className="access-name">
-                    {u.name}
+                    <span className="access-name-text">{u.name}</span>
                     {isMe && <span className="access-you">You</span>}
                   </div>
                   <div className="access-email">{u.email}</div>
                 </button>
 
-                <div className="access-role-select">
-                  <CustomSelect
-                    value={u.role || 'admin'}
-                    onChange={e => changeRole(u, e.target.value)}
-                    options={[{ label: 'Staff', value: 'staff' }, { label: 'Admin', value: 'admin' }]}
-                    searchable={false}
-                    disabled={isMe || busyId === u._id}
-                  />
-                </div>
+                <div className="access-actions">
+                  <div className="access-role-select">
+                    <CustomSelect
+                      value={u.role || 'admin'}
+                      onChange={e => changeRole(u, e.target.value)}
+                      options={[{ label: 'Staff', value: 'staff' }, { label: 'Admin', value: 'admin' }]}
+                      searchable={false}
+                      advanceOnSelect={false}
+                      disabled={isMe || busyId === u._id}
+                    />
+                  </div>
 
-                <button type="button" className="entry-icon-btn" title="Reset password"
-                  onClick={() => { setResetFor(u); setResetPw(''); setError(''); }} disabled={busyId === u._id}>
-                  <KeyRound size={16} />
-                </button>
-                <button type="button" className="entry-icon-btn" title={isMe ? 'You cannot remove yourself' : 'Remove user'}
-                  onClick={() => { setRemoveTarget(u); setError(''); }} disabled={isMe || busyId === u._id}
-                  style={{ color: isMe ? '#5A5A57' : 'var(--danger)' }}>
-                  <Trash2 size={16} />
-                </button>
+                  <button type="button" className="entry-icon-btn" title="Reset password"
+                    onClick={() => { setResetFor(u); setResetPw(''); setError(''); }} disabled={busyId === u._id}>
+                    <KeyRound size={16} />
+                  </button>
+                  <button type="button" className="entry-icon-btn" title={isMe ? 'You cannot remove yourself' : 'Remove user'}
+                    onClick={() => { setRemoveTarget(u); setError(''); }} disabled={isMe || busyId === u._id}
+                    style={{ color: isMe ? '#5A5A57' : 'var(--danger)' }}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             );
           })}
