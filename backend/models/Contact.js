@@ -5,6 +5,10 @@ const contactSchema = new mongoose.Schema({
     // 24-char hex string nobody can read out over the phone; this is the ID
     // staff actually refer to. Assigned in ContactController.insert.
     entry_no: { type: Number, default: null, index: true },
+    // Optional manual series code — up to 3 letters (e.g. A, AA, AB). This is a
+    // human label the operator assigns; the numeric series is derived from
+    // entry_no separately on the client.
+    series_code: { type: String, default: null },
     honorific: { type: String, default: null },
     full_name: { type: String, required: true },
     relation: { type: String, default: null },
@@ -34,6 +38,15 @@ const contactSchema = new mongoose.Schema({
     products: { type: [String], default: [] },         // Cot, Mattresses, Sofa set, …
     contact_date: { type: Date, default: null },       // manually entered date (createdAt is the auto date)
     notes: { type: String, default: null },
+    // Per-product quantity, keyed by product name (e.g. { Cot: 3, "Sofa set": 1 }).
+    // Kept separate from `products` so the existing array/display keeps working;
+    // a missing key just means quantity 1.
+    product_quantities: { type: Map, of: Number, default: {} },
+    // Cancelled ("cancel bill") — a soft flag so the entry is kept for records
+    // but marked void. Distinct from deletion.
+    cancelled: { type: Boolean, default: false },
+    cancelled_at: { type: Date, default: null },
+    cancelled_reason: { type: String, default: null },
     // Who created the entry. created_by_name is a snapshot so the entry still
     // shows an author even if that user is later renamed or removed.
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

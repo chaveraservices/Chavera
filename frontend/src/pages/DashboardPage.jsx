@@ -4,7 +4,8 @@ import api from '../utils/api';
 import DonutChart from '../components/DonutChart';
 import ProductSummaryModal from '../components/ProductSummaryModal';
 import DateRangeFilter from '../components/DateRangeFilter';
-import { Users, Store, UserCheck, Star } from 'lucide-react';
+import ReportModal from '../components/ReportModal';
+import { Users, Store, UserCheck, Star, BarChart3 } from 'lucide-react';
 
 // Horizontal bar list. Rows are clickable to drill into the Directory (via filterKey).
 function Bars({ data, color, filterKey, navigate, emptyText = 'No data yet' }) {
@@ -58,6 +59,7 @@ export default function DashboardPage() {
   // "All time" first — the dashboard opens showing everything, then narrows.
   const [range, setRange] = useState({ preset: 'all', from: null, to: null });
   const [productSummary, setProductSummary] = useState(null);  // slice-click summary
+  const [showReport, setShowReport] = useState(false);         // Summary Report modal
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +98,12 @@ export default function DashboardPage() {
         {/* One filter row above everything it scopes: every figure below moves
             with this control. Scopes the dashboard only — the Directory keeps
             its own filters and is not affected. */}
-        <DateRangeFilter value={range} onChange={setRange} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <DateRangeFilter value={range} onChange={setRange} />
+          <button type="button" className="btn btn-primary" onClick={() => setShowReport(true)} title="Open the summary report">
+            <BarChart3 size={16} /> Reports
+          </button>
+        </div>
       </div>
 
       {range.preset !== 'all' && (
@@ -173,6 +180,8 @@ export default function DashboardPage() {
         onClose={() => setProductSummary(null)}
         onSeeAll={(label) => navigate(`/?product=${encodeURIComponent(label)}`)}
       />
+
+      <ReportModal open={showReport} onClose={() => setShowReport(false)} />
     </div>
   );
 }

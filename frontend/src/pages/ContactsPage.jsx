@@ -13,6 +13,12 @@ import { useAuth } from '../context/AuthContext';
 import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, CATEGORY_OPTIONS } from '../utils/contactFields';
 import useProducts from '../utils/useProducts';
 
+// "Cot ×3, Sofa set" — quantity shown only when it's more than one.
+const productListWithQty = (products, qtys) =>
+  (Array.isArray(products) ? products : [])
+    .map(p => { const q = qtys && qtys[p]; return q && q > 1 ? `${p} ×${q}` : p; })
+    .join(', ');
+
 export default function ContactsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -227,6 +233,17 @@ export default function ContactsPage() {
     }
   };
 
+  // Cancel bill (or restore). Kept as a soft flag on the entry.
+  const handleCancel = async (c, cancelled) => {
+    try {
+      await api.post('/contact/cancel', { id: c._id, cancelled });
+      setDetailContact(null);
+      setRefreshTick(t => t + 1);
+    } catch (err) {
+      setAlertConfig({ isOpen: true, message: err.response?.data?.message || 'Failed to update the entry', type: 'error' });
+    }
+  };
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -282,14 +299,17 @@ export default function ContactsPage() {
       label: 'NAME',
       render: c => (
         <>
-          <div style={{ fontWeight: 600 }}>{c.honorific ? `${c.honorific} ` : ''}{c.full_name}</div>
+          <div style={{ fontWeight: 600 }}>
+            {c.honorific ? `${c.honorific} ` : ''}{c.full_name}
+            {c.cancelled && <span className="badge is-cancelled" style={{ marginLeft: 8 }}>Cancelled</span>}
+          </div>
           {c.business_name && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{c.business_name}</div>}
         </>
       ),
     },
     products: {
       label: 'PRODUCT',
-      render: c => (Array.isArray(c.products) && c.products.length) ? c.products.join(', ') : '—',
+      render: c => (Array.isArray(c.products) && c.products.length) ? productListWithQty(c.products, c.product_quantities) : '—',
     },
     location: {
       label: 'LOCATION',
@@ -468,7 +488,7 @@ export default function ContactsPage() {
                 contacts.map(contact => (
                   <tr
                     key={contact._id}
-                    className="row-clickable"
+                    className={`row-clickable ${contact.cancelled ? 'row-cancelled' : ''}`}
                     onClick={() => setDetailContact(contact)}
                     tabIndex={0}
                     role="button"
@@ -573,6 +593,7 @@ export default function ContactsPage() {
         contact={formState.contact}
         onClose={closeForm}
         onSaved={() => { closeForm(); setRefreshTick(t => t + 1); }}
+        onCancelBill={isAdmin ? (c, cancelled) => { closeForm(); handleCancel(c, cancelled); } : undefined}
       />
 
       <EntryDetailModal
@@ -580,6 +601,7 @@ export default function ContactsPage() {
         onClose={() => setDetailContact(null)}
         onEdit={(c) => { setDetailContact(null); openEdit(c); }}
         onDelete={isAdmin ? (c) => { setDetailContact(null); setContactToDelete(c); } : undefined}
+        onCancel={isAdmin ? handleCancel : undefined}
         onNotify={(msg) => setAlertConfig({ isOpen: true, message: msg, type: 'error' })}
       />
 

@@ -424,6 +424,17 @@ body {
 .input-field::placeholder {
   color: #6B6B68;
 }
+/* Read-only value styled like a field (Entry No / derived Series). */
+.input-field.is-readonly {
+  background: var(--bg-main);
+  color: var(--text-dark);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+}
+/* Three-up row (Series Code / Entry No / Series). */
+.form-grid-3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 560px) { .form-grid-3 { grid-template-columns: 1fr; } }
 
 /* Segmented DD / MM / YYYY date field (custom, so ↑/↓ can step each segment). */
 .date-field {
@@ -1399,6 +1410,31 @@ textarea.input-error-field {
 .entry-action.is-primary { border-color: var(--primary-accent); color: var(--accent-text); }
 .entry-action.is-primary:hover { background: var(--highlight); }
 .entry-action.is-danger:hover { color: var(--danger); border-color: var(--danger); }
+.entry-action.is-warn:hover { color: #FBBF24; border-color: #FBBF24; }
+
+/* Series tag under the entry number in the table. */
+.cell-series {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--highlight);
+  color: var(--accent-text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* Cancelled ("cancel bill") styling. */
+.badge.is-cancelled {
+  background: #3B1A1A;
+  color: var(--danger);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.row-cancelled { opacity: 0.6; }
+.row-cancelled td { text-decoration: line-through; text-decoration-color: rgba(248, 113, 113, 0.5); }
+.row-cancelled .badge.is-cancelled { text-decoration: none; }
 
 /* ---- Dark-theme legibility fixes ---------------------------------------- */
 /* Browsers grey out disabled text by default, which on a dark surface drops
@@ -1900,6 +1936,202 @@ html.modal-open .main-content {
   font-size: 0.85rem;
   width: 130px;
 }
+
+/* ---- Summary Report modal ---- */
+.report-modal {
+  width: 100%;
+  max-width: 760px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
+}
+.report-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 20px 0;
+  flex-shrink: 0;
+}
+.report-product { margin-left: auto; width: 180px; }
+@media (max-width: 560px) {
+  .report-tabs { flex-wrap: wrap; }
+  .report-product { margin-left: 0; width: 100%; }
+}
+.report-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.report-tab.active { background: var(--highlight); color: var(--accent-text); border-color: var(--primary-accent); }
+.report-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.report-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.report-preset {
+  padding: 7px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-main);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.report-preset:hover { color: var(--text-dark); border-color: var(--primary-accent); }
+.report-preset.active { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+.report-custom { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
+.report-custom label { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); }
+.report-custom input {
+  padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 8px;
+  background: var(--bg-main); color: var(--text-dark); font-family: inherit; outline: none;
+}
+.report-custom input:focus { border-color: var(--primary-accent); }
+
+.report-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.report-card {
+  padding: 14px 16px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.report-card.tone-green { background: #0F2A1E; border-color: #1C4532; }
+.report-card.tone-amber { background: #2A2010; border-color: #4A3A1A; }
+.report-card-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.report-card-value { font-size: 1.6rem; font-weight: 700; color: var(--text-dark); margin-top: 6px; line-height: 1.1; }
+.report-card.tone-green .report-card-value { color: #34D399; }
+.report-card.tone-amber .report-card-value { color: #FBBF24; }
+.report-card-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+.report-graph { margin-top: 18px; }
+.report-graph-title { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 8px; }
+.series-chart { position: relative; background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 10px 8px 4px; }
+.series-tip {
+  position: absolute; top: 6px; transform: translateX(-50%);
+  pointer-events: none; white-space: nowrap;
+  background: var(--bg-white); border: 1px solid var(--border-color);
+  border-radius: 8px; padding: 6px 10px; box-shadow: 0 6px 16px -6px rgba(0,0,0,0.5);
+}
+.series-tip-title { font-size: 0.8rem; font-weight: 700; color: var(--text-dark); }
+.series-tip-sub { font-size: 0.72rem; color: var(--text-muted); }
+.series-tip-val { font-size: 0.8rem; font-weight: 600; color: var(--accent-text); margin-top: 2px; }
+
+.report-series-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.report-range-sep { padding-bottom: 12px; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); }
+.report-series-row .report-series-input input { width: 120px; }
+.report-series-input label { display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 5px; }
+.report-series-input input {
+  width: 150px; padding: 10px 12px;
+  border: 1px solid var(--primary-accent); border-radius: 8px;
+  background: var(--bg-main); color: var(--text-dark);
+  font-family: inherit; font-size: 1rem; font-weight: 600; outline: none;
+}
+.report-serial-range {
+  flex: 1; min-width: 180px;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 8px 14px; border: 1px solid var(--primary-accent); border-radius: 8px; background: var(--highlight);
+}
+.report-serial-range-label { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; color: var(--accent-text); }
+.report-serial-range-val { font-size: 1.05rem; font-weight: 700; color: var(--text-dark); }
+
+.report-list-head { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dark); }
+.report-count { padding: 1px 8px; border-radius: 999px; background: var(--highlight); color: var(--accent-text); font-size: 0.72rem; }
+.report-newest { margin-left: auto; font-size: 0.7rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
+.report-search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px; margin: 4px 0 10px;
+  background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 8px;
+  color: var(--text-muted);
+}
+.report-search input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  color: var(--text-dark); font-family: inherit; font-size: 0.85rem;
+}
+.report-list { display: flex; flex-direction: column; gap: 4px; }
+.report-list-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 8px 12px; background: var(--bg-main);
+  border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;
+  font-family: inherit; color: var(--text-dark);
+}
+.report-list-row.is-click { cursor: pointer; }
+.report-list-row.is-click:hover { border-color: var(--primary-accent); background: var(--highlight); }
+.report-list-row.is-cancelled { opacity: 0.6; }
+.report-list-row.is-cancelled .report-list-name { text-decoration: line-through; }
+.report-list-no { font-variant-numeric: tabular-nums; color: var(--accent-text); font-weight: 600; flex-shrink: 0; width: 56px; }
+.report-list-name { flex: 1; min-width: 0; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-list-date { color: var(--text-muted); flex-shrink: 0; }
+
+/* Per-product quantity editors under the product pills. */
+.qty-editor { margin-top: 12px; }
+.qty-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-main);
+  color: var(--text-dark);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qty-toggle:hover { border-color: var(--primary-accent); }
+.qty-toggle .chevron { transition: transform 0.2s; color: var(--text-muted); }
+.qty-toggle .chevron.open { transform: rotate(180deg); }
+.qty-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.qty-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+.qty-name { flex: 1; min-width: 0; font-size: 0.85rem; color: var(--text-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qty-input {
+  width: 68px;
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-white);
+  color: var(--text-dark);
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: center;
+  outline: none;
+}
+.qty-input:focus { border-color: var(--primary-accent); }
 .product-add-inline input::placeholder { color: #5A5A57; }
 .product-add-inline .entry-icon-btn { width: 26px; height: 26px; }
 

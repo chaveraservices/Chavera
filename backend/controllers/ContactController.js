@@ -4,6 +4,25 @@ import ApiError from '../utils/ApiError.js';
 
 const REQUIRED_MSG = 'Missing required fields: full_name, village_town, or phone_1';
 
+// Series code: up to 3 letters, upper-cased (A, AA, AB). Blank → null.
+const cleanSeriesCode = (raw) => {
+    const s = String(raw ?? '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+    return s || null;
+};
+
+// Keep only sensible per-product quantities (whole numbers > 1). Quantity 1 is
+// the default, so it isn't stored — a missing key just means "one".
+const cleanQuantities = (raw) => {
+    const out = {};
+    if (raw && typeof raw === 'object') {
+        for (const [name, v] of Object.entries(raw)) {
+            const n = parseInt(v, 10);
+            if (Number.isFinite(n) && n > 1) out[name] = n;
+        }
+    }
+    return out;
+};
+
 // Escape user input before using it inside a RegExp.
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -178,11 +197,15 @@ export default class ContactController {
     // Aggregated analytics for the dashboard.
     // Body: { from, to } — optional 'YYYY-MM-DD' window scoping every figure.
     async getAnalytics(req, res, next) {
-        const { from, to } = req.body || {};
+        const { from, to, product } = req.body || {};
         const range = dateRangeExpr(from, to);
         // Prepended to every pipeline so the whole dashboard moves together.
-        const scope = range ? [{ $match: { $expr: range } }] : [];
-        const scopeQuery = range ? { $expr: range } : {};
+        // Optional product filter narrows to contacts that include that product.
+        const baseMatch = {};
+        if (range) baseMatch.$expr = range;
+        if (product) baseMatch.products = String(product);
+        const scope = Object.keys(baseMatch).length ? [{ $match: baseMatch }] : [];
+        const scopeQuery = baseMatch;
 
         const groupCount = (field, limit) => Contact.aggregate([
             ...scope,
@@ -193,8 +216,9 @@ export default class ContactController {
             { $project: { _id: 0, label: '$_id', count: 1 } },
         ]);
 
-        const [total, byProduct, productContacts, byCategory, byPurchase, byGrade, byHouse, byState] = await Promise.all([
+        const [total, cancelledCount, byProduct, productContacts, byCategory, byPurchase, byGrade, byHouse, byState] = await Promise.all([
             Contact.countDocuments(scopeQuery),
+            Contact.countDocuments({ ...scopeQuery, cancelled: true }),
             Contact.aggregate([
                 ...scope,
                 { $unwind: '$products' },
@@ -214,7 +238,7 @@ export default class ContactController {
             groupCount('state', 8),
         ]);
 
-        res.locals.data = { total, byProduct, productContacts, byCategory, byPurchase, byGrade, byHouse, byState };
+        res.locals.data = { total, cancelledCount, byProduct, productContacts, byCategory, byPurchase, byGrade, byHouse, byState };
         res.locals.message = 'Analytics fetched successfully';
         next();
     }
@@ -279,7 +303,7 @@ export default class ContactController {
     }
 
     async insert(req, res, next) {
-        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, phones, category, customer_grade, house_type, purchase_type, products, contact_date, notes } = req.body;
+        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, phones, category, customer_grade, house_type, purchase_type, products, product_quantities, series_code, contact_date, notes } = req.body;
 
         // Trim required string fields before validation
         full_name = (full_name || '').trim();
@@ -310,10 +334,12 @@ export default class ContactController {
 
         const newContact = new Contact({
             entry_no: await nextEntryNo(),
+            series_code: cleanSeriesCode(series_code),
             honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark,
             village_town, mandal, district, state, pincode, phone_1, phone_2: secondPhone, phones: cleanPhones, category,
             customer_grade, house_type, purchase_type,
             products: Array.isArray(products) ? products : (products ? [products] : []),
+            product_quantities: cleanQuantities(product_quantities),
             contact_date: contact_date || null,
             notes,
             created_by: req.user?.id || null,
@@ -399,6 +425,13 @@ export default class ContactController {
             }
         }
 
+        if (updates.product_quantities !== undefined) {
+            updates.product_quantities = cleanQuantities(updates.product_quantities);
+        }
+        if (updates.series_code !== undefined) {
+            updates.series_code = cleanSeriesCode(updates.series_code);
+        }
+
         // Trim required string fields
         if (updates.full_name !== undefined) updates.full_name = updates.full_name.trim();
         if (updates.village_town !== undefined) updates.village_town = updates.village_town.trim();
@@ -427,6 +460,106 @@ export default class ContactController {
 
         res.locals.data = null;
         res.locals.message = 'Contact deleted successfully';
+        next();
+    }
+
+    // The entry number a new entry would receive, so the form can show it (and
+    // its derived series) before the entry is saved.
+    async getNextEntryNo(req, res, next) {
+        const n = await nextEntryNo();
+        res.locals.data = { entry_no: n };
+        res.locals.message = 'Next entry number';
+        next();
+    }
+
+    // "Cancel bill" — mark an entry cancelled (kept for records), or restore it.
+    async cancel(req, res, next) {
+        const { id, cancelled = true, reason } = req.body || {};
+        if (!id) throw new ApiError(400, 'Contact ID is required');
+
+        const update = cancelled
+            ? { cancelled: true, cancelled_at: new Date(), cancelled_reason: (reason || '').trim() || null }
+            : { cancelled: false, cancelled_at: null, cancelled_reason: null };
+
+        const c = await Contact.findByIdAndUpdate(id, update, { new: true });
+        if (!c) throw new ApiError(404, 'Contact not found');
+
+        res.locals.data = c;
+        res.locals.message = cancelled ? 'Entry cancelled' : 'Entry restored';
+        next();
+    }
+
+    // Entries grouped into series of 100 by entry_no
+    // (series = floor((entry_no - 1) / 100) + 1), for the Reports view.
+    async seriesReport(req, res, next) {
+        const { product } = req.body || {};
+        const match = { entry_no: { $ne: null } };
+        if (product) match.products = String(product);
+        const rows = await Contact.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: { $add: [{ $floor: { $divide: [{ $subtract: ['$entry_no', 1] }, 100] } }, 1] },
+                    count: { $sum: 1 },
+                    active: { $sum: { $cond: [{ $eq: ['$cancelled', true] }, 0, 1] } },
+                    cancelled: { $sum: { $cond: [{ $eq: ['$cancelled', true] }, 1, 0] } },
+                },
+            },
+            { $sort: { _id: 1 } },
+        ]);
+
+        const series = rows.map(r => ({
+            series: r._id,
+            count: r.count,
+            active: r.active,
+            cancelled: r.cancelled,
+            from: (r._id - 1) * 100 + 1,
+            to: r._id * 100,
+        }));
+
+        res.locals.data = {
+            series,
+            totals: {
+                total: series.reduce((s, x) => s + x.count, 0),
+                active: series.reduce((s, x) => s + x.active, 0),
+                cancelled: series.reduce((s, x) => s + x.cancelled, 0),
+                seriesCount: series.length,
+            },
+        };
+        res.locals.message = 'Series report fetched successfully';
+        next();
+    }
+
+    // Entries for one series (100-wide entry_no window), newest entry first.
+    async seriesEntries(req, res, next) {
+        const s = parseInt(req.body?.series, 10);
+        if (!Number.isInteger(s) || s < 1) throw new ApiError(400, 'A valid series number is required');
+
+        const from = (s - 1) * 100 + 1;
+        const to = s * 100;
+        const items = await Contact.find({ entry_no: { $gte: from, $lte: to } }).sort({ entry_no: -1 });
+
+        res.locals.data = { series: s, from, to, count: items.length, items };
+        res.locals.message = 'Series entries fetched successfully';
+        next();
+    }
+
+    // Entries in an arbitrary entry_no range [from, to], newest entry first.
+    async entriesRange(req, res, next) {
+        let from = parseInt(req.body?.from, 10);
+        let to = parseInt(req.body?.to, 10);
+        if (!Number.isInteger(from) || !Number.isInteger(to)) {
+            throw new ApiError(400, 'A valid from and to entry number are required');
+        }
+        if (from > to) { const t = from; from = to; to = t; }   // tolerate reversed input
+        if (from < 1) from = 1;
+
+        const query = { entry_no: { $gte: from, $lte: to } };
+        if (req.body?.product) query.products = String(req.body.product);
+        const items = await Contact.find(query).sort({ entry_no: -1 });
+
+        res.locals.data = { from, to, count: items.length, items };
+        res.locals.message = 'Entries in range fetched successfully';
         next();
     }
 }

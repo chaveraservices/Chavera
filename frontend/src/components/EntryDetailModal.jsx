@@ -1,8 +1,16 @@
 import { useEffect } from 'react';
-import { X, Pencil, Tags, Trash2, MapPin, Building2 } from 'lucide-react';
+import { X, Pencil, Tags, Trash2, MapPin, Building2, Ban, RotateCcw } from 'lucide-react';
 import { printLabels } from '../utils/printLabels';
 import { gradeWithSymbol } from '../utils/contactFields';
+import { seriesOf } from '../utils/series';
 import useBodyScrollLock from '../utils/useBodyScrollLock';
+
+// "Cot ×3, Sofa set" — append a quantity only when it's more than one.
+const productsWithQty = (products, qtys) =>
+  (Array.isArray(products) ? products : []).map(p => {
+    const q = qtys && (qtys[p] ?? (typeof qtys.get === 'function' ? qtys.get(p) : undefined));
+    return q && q > 1 ? `${p} ×${q}` : p;
+  });
 
 const fmtDate = (d) => {
   if (!d) return '—';
@@ -31,7 +39,7 @@ function Row({ label, value, accent }) {
  * onEdit / onDelete are optional: staff get neither, so the buttons simply
  * don't render for them.
  */
-export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, onNotify }) {
+export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, onCancel, onNotify, zIndex = 300 }) {
   // Freeze the page behind so the wheel only moves this list.
   useBodyScrollLock(!!contact);
 
@@ -51,6 +59,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
   // from the person's name — then surface the business label in the header.
   const businessName = (c.business_name || '').trim();
   const isBusiness = businessName && businessName.toLowerCase() !== (c.full_name || '').trim().toLowerCase();
+  const series = seriesOf(c.entry_no);
 
   const handleLabel = () => {
     const err = printLabels([c]);
@@ -58,7 +67,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 300 }}>
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex }}>
       <div className="entry-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Entry ${c.entry_no ?? ''} ${name}`}>
         {/* Header carries identity: entry number, name, category */}
         <div className="entry-modal-head">
@@ -73,6 +82,9 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
             )}
             <div className="entry-modal-sub">
               {c.entry_no != null && <span className="entry-chip">#{c.entry_no}</span>}
+              {c.series_code && <span className="entry-chip">Code {c.series_code}</span>}
+              {series != null && <span className="entry-chip">Series {series}</span>}
+              {c.cancelled && <span className="badge is-cancelled">Cancelled</span>}
               {isBusiness && <span className="badge dealer">Business</span>}
               {c.category && <span className={`badge ${String(c.category).toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>{c.category}</span>}
               {c.customer_grade && <span className="entry-chip">{gradeWithSymbol(c.customer_grade)}</span>}
@@ -92,10 +104,14 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
 
         <div className="entry-modal-body">
           <Row label="Entry No" value={c.entry_no != null ? `#${c.entry_no}` : null} />
+          <Row label="Series Code" value={c.series_code} />
+          <Row label="Series" value={series != null ? `Series ${series}` : null} />
           <Row label="Date" value={fmtDate(c.contact_date || c.createdAt)} />
           <Row label="Entered by" value={c.created_by_name} />
+          {c.cancelled && <Row label="Cancelled on" value={fmtDate(c.cancelled_at)} />}
+          {c.cancelled && c.cancelled_reason && <Row label="Cancel reason" value={c.cancelled_reason} />}
           <Row label="Business" value={c.business_name} />
-          <Row label="Products" value={c.products} accent />
+          <Row label="Products" value={productsWithQty(c.products, c.product_quantities)} accent />
           <Row label="Phone 1" value={c.phone_1 ? `+91 ${c.phone_1}` : null} />
           {/* Additional numbers: prefer the phones[] array, fall back to phone_2. */}
           {(Array.isArray(c.phones) && c.phones.length ? c.phones : (c.phone_2 ? [c.phone_2] : []))
@@ -127,6 +143,18 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
           <button type="button" className="entry-action is-primary" onClick={handleLabel} title="Print a 75mm x 50mm label for this entry">
             <Tags size={17} /><span>Print Label</span>
           </button>
+          {/* Cancel bill: mark the entry void (kept for records), or restore it. */}
+          {onCancel && (
+            c.cancelled ? (
+              <button type="button" className="entry-action" onClick={() => onCancel(c, false)} title="Restore this entry">
+                <RotateCcw size={17} /><span>Restore</span>
+              </button>
+            ) : (
+              <button type="button" className="entry-action is-warn" onClick={() => onCancel(c, true)} title="Cancel this bill / entry">
+                <Ban size={17} /><span>Cancel Bill</span>
+              </button>
+            )
+          )}
           {onDelete && (
             <button type="button" className="entry-action is-danger" onClick={() => onDelete(c)} title="Delete entry">
               <Trash2 size={17} /><span>Delete</span>

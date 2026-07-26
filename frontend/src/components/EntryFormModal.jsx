@@ -7,14 +7,14 @@ import useBodyScrollLock from '../utils/useBodyScrollLock';
  * a half-typed entry is easy to lose that way. Closing is only via the form's
  * own Cancel button or the header ✕ (both call onClose).
  */
-export default function EntryFormModal({ open, contact, onClose, onSaved }) {
+export default function EntryFormModal({ open, contact, onClose, onSaved, onCancelBill }) {
   useBodyScrollLock(open);
   if (!open) return null;
 
   return (
     <div className="modal-overlay" style={{ zIndex: 310, alignItems: 'flex-start', padding: '4vh 16px' }}>
       <div className="entry-form-modal" role="dialog" aria-modal="true" aria-label={contact ? 'Edit entry' : 'New entry'}>
-        <ContactForm contact={contact} onCancel={onClose} onSave={onSaved} onClose={onClose} />
+        <ContactForm contact={contact} onCancel={onClose} onSave={onSaved} onClose={onClose} onCancelBill={onCancelBill} />
       </div>
     </div>
   );
