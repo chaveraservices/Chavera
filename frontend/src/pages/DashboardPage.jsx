@@ -113,7 +113,20 @@ export default function DashboardPage() {
       )}
 
       {loading && !data ? (
-        <div style={{ color: 'var(--text-muted)', padding: '2rem 0' }}>Loading analytics…</div>
+        // Ghost loading: mirror the real layout (stat cards + two panels) so the
+        // page doesn't jump when data lands.
+        <div aria-busy="true" aria-label="Loading analytics">
+          <div className="stat-grid">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="shimmer-block skeleton-stat" />
+            ))}
+          </div>
+          <div className="shimmer-block skeleton-card" style={{ marginBottom: 24 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+            <div className="shimmer-block skeleton-card" />
+            <div className="shimmer-block skeleton-card" />
+          </div>
+        </div>
       ) : (
         // On refetch, hold the previous render dimmed rather than flashing a
         // skeleton and jumping the layout.

@@ -29,7 +29,7 @@ export default function LoginPage({ onLogin }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)' }}>
-      <div style={{ width: 400, background: 'var(--bg-white)', padding: '2rem', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+      <div style={{ width: 400, background: 'var(--glass-bg-strong)', backdropFilter: 'var(--glass-blur-strong)', WebkitBackdropFilter: 'var(--glass-blur-strong)', padding: '2rem', borderRadius: '18px', border: '1px solid var(--glass-border-strong)', boxShadow: 'var(--glass-sheen), 0 24px 60px -12px rgba(0,0,0,0.7)', animation: 'modalPopIn 0.45s var(--ease-glass) both' }}>
         <h2 style={{ textAlign: 'center', marginBottom: '0.5rem', color: 'var(--text-dark)' }}>Welcome Back</h2>
         <p style={{ textAlign: 'center', marginBottom: '2rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Enter your credentials to login</p>
         

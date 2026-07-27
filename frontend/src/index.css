@@ -23,6 +23,30 @@
   --accent-fill: #C54C1A;      /* accent behind white text — 4.75:1 */
   --highlight: #2A1710;        /* tinted selection wash */
 
+  /* Brand gradients + an accent glow. The fill gradient keeps its darker half
+     (#C54C1A, 4.75:1) under the centred white label; a text-shadow on buttons
+     covers the lighter corner. */
+  --gradient-accent: linear-gradient(135deg, #EA6A2E 0%, #C54C1A 100%);
+  --gradient-accent-hover: linear-gradient(135deg, #F2762F 0%, #D9531C 100%);
+  --gradient-accent-soft: linear-gradient(135deg, rgba(242,118,47,0.18) 0%, rgba(226,92,36,0.07) 100%);
+  --shadow-accent: 0 8px 20px -6px rgba(226, 92, 36, 0.55);
+  --shadow-card-hover: 0 12px 26px -10px rgba(0, 0, 0, 0.7);
+
+  /* ── Liquid glass: translucent tinted panels over the ambient aura. ──
+     Surfaces stay on the same near-black palette, just semi-transparent with a
+     backdrop blur + a faint top sheen so they read as frosted glass. */
+  --glass-bg: rgba(26, 26, 25, 0.60);
+  --glass-bg-strong: rgba(20, 20, 19, 0.80);
+  --glass-bg-soft: rgba(35, 35, 34, 0.45);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.12);
+  --glass-blur: blur(18px) saturate(1.4);
+  --glass-blur-strong: blur(30px) saturate(1.6);
+  --glass-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.6);
+  --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* Snappy, slightly springy easing used across transitions + entrances. */
+  --ease-glass: cubic-bezier(0.16, 1, 0.3, 1);
+
   --text-dark: #F5F5F4;        /* primary ink */
   --text-table-header: #C9C8C3;
   --text-muted: #A1A1A0;
@@ -57,6 +81,33 @@ body {
   min-height: 100vh;
 }
 
+/* Ambient aura — soft accent glows fixed behind the whole app, so the frosted
+   glass surfaces have colour + depth to refract. Stays within the palette
+   (brand orange at low opacity). Drifts slowly for a subtle "liquid" feel. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48vmax 40vmax at 12% 2%, rgba(226, 92, 36, 0.22), transparent 55%),
+    radial-gradient(46vmax 40vmax at 100% 100%, rgba(242, 118, 47, 0.16), transparent 55%),
+    radial-gradient(34vmax 30vmax at 82% 14%, rgba(197, 76, 26, 0.12), transparent 60%),
+    radial-gradient(30vmax 28vmax at 35% 115%, rgba(226, 92, 36, 0.10), transparent 60%);
+  /* scale keeps the drift from ever revealing an un-tinted edge */
+  transform: scale(1.2);
+  animation: auraDrift 26s ease-in-out infinite alternate;
+}
+@keyframes auraDrift {
+  from { transform: scale(1.2) translate(0, 0); }
+  to   { transform: scale(1.2) translate(3%, 2%); }
+}
+/* index.html sets an opaque anti-flash background on #root; clear it once the
+   stylesheet lands so the ambient aura shows through (html/body keep the base
+   colour, so there's still no white flash on load). */
+#root { background-color: transparent; }
+
 /* Layout — top navbar shell (replaced the left sidebar) */
 .app-shell {
   display: flex;
@@ -72,8 +123,13 @@ body {
   height: 60px;
   flex-shrink: 0;
   padding: 0 20px;
-  background: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-color);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-sheen), 0 1px 20px -8px rgba(0, 0, 0, 0.7);
+  position: relative;
+  z-index: 40;
 }
 .navbar-brand {
   display: flex;
@@ -111,7 +167,8 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 .nav-item.active {
-  background-color: var(--highlight);
+  background-image: var(--gradient-accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(226, 92, 36, 0.25);
   color: var(--accent-text);
   font-weight: 600;
 }
@@ -138,7 +195,7 @@ body {
 .navbar-avatar {
   width: 28px; height: 28px;
   border-radius: 50%;
-  background: var(--accent-fill);
+  background: var(--gradient-accent);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -162,10 +219,13 @@ body {
   z-index: 91;
   min-width: 220px;
   padding: 6px;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.55);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 14px;
+  box-shadow: var(--glass-sheen), 0 12px 28px -6px rgba(0, 0, 0, 0.55);
+  animation: modalPopIn 0.2s var(--ease-glass) both;
 }
 .navbar-menu-head { padding: 10px 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; }
 .navbar-menu-item {
@@ -246,13 +306,30 @@ body {
   transition: all 0.2s;
 }
 .btn-primary {
-  /* --accent-fill, not --primary-accent: white text on the brand orange is
-     only 3.63:1, while the darker fill clears AA at 4.75:1. */
-  background-color: var(--accent-fill);
+  /* Gradient built on the accessible fill (#C54C1A, 4.75:1); the text-shadow
+     keeps the white label legible over the lighter corner. */
+  background: var(--gradient-accent);
   color: #FFFFFF;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 4px 12px -4px rgba(226, 92, 36, 0.45);
 }
 .btn-primary:hover {
-  background-color: var(--primary-accent);
+  background: var(--gradient-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-accent);
+}
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 8px -4px rgba(226, 92, 36, 0.5);
+}
+/* Secondary buttons (Export / Import / Filters) keep their inline fill but gain
+   a subtle lift + shadow on hover. */
+.btn:not(.btn-primary):not(.btn-link):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.55);
+}
+.btn:not(.btn-primary):not(.btn-link):active {
+  transform: translateY(0);
 }
 .btn-link {
   background: transparent;
@@ -282,11 +359,18 @@ body {
 .search-bar {
   display: flex;
   align-items: center;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  background: var(--glass-bg-soft);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
   padding: 8px 12px;
   width: 300px;
+  transition: border-color 0.2s var(--ease-glass), box-shadow 0.2s var(--ease-glass);
+}
+.search-bar:focus-within {
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 0 3px rgba(226, 92, 36, 0.15);
 }
 .search-bar input {
   border: none;
@@ -314,11 +398,15 @@ body {
 }
 
 .table-container {
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow: var(--glass-sheen), var(--glass-shadow);
   /* scroll sideways when many columns are shown */
   overflow-x: auto;
+  animation: fadeSlideUp 0.4s var(--ease-glass) both;
 }
 .data-table th, .data-table td { white-space: nowrap; }
 
@@ -375,11 +463,14 @@ body {
 }
 
 .form-section {
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  /* Translucent tint only (no own backdrop-filter): these nest inside the
+     frosted modal, so a second blur would muddy the glass. */
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   padding: 24px;
   margin-bottom: 24px;
+  box-shadow: var(--glass-sheen);
 }
 .form-section-title {
   font-size: 0.85rem;
@@ -410,16 +501,19 @@ body {
 }
 .input-field {
   padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-white);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--glass-bg-soft);
   color: var(--text-dark);
   font-family: inherit;
   font-size: 0.95rem;
   outline: none;
+  transition: border-color 0.2s var(--ease-glass), box-shadow 0.2s var(--ease-glass), background 0.2s var(--ease-glass);
 }
 .input-field:focus {
   border-color: var(--primary-accent);
+  box-shadow: 0 0 0 3px rgba(226, 92, 36, 0.15);
+  background: var(--glass-bg);
 }
 .input-field::placeholder {
   color: #6B6B68;
@@ -462,24 +556,30 @@ body {
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
   padding: 16px;
   overscroll-behavior: contain;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  animation: overlayFade 0.25s ease both;
 }
 .modal-content {
-  background: var(--bg-white);
-  border-radius: 16px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 18px;
   width: 100%;
   max-width: 650px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--glass-sheen), 0 24px 60px -12px rgba(0, 0, 0, 0.7);
+  animation: modalPopIn 0.32s var(--ease-glass) both;
 }
 .modal-header {
   padding: 20px 24px;
@@ -518,13 +618,13 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
   font-size: 0.9rem;
   color: var(--text-dark);
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s var(--ease-glass), box-shadow 0.2s var(--ease-glass);
   min-height: 42px;
 }
 .custom-select-trigger:hover, .custom-select-trigger:focus {
@@ -606,13 +706,13 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
   cursor: pointer;
   font-size: 0.95rem;
   color: var(--text-dark);
-  transition: all 0.2s;
+  transition: border-color 0.2s var(--ease-glass), box-shadow 0.2s var(--ease-glass), background 0.2s var(--ease-glass);
   user-select: none;
   min-height: 42px;
 }
@@ -646,10 +746,12 @@ body {
   top: calc(100% + 6px);
   left: 0;
   width: 100%;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 12px;
+  box-shadow: var(--glass-sheen), 0 16px 34px -8px rgba(0,0,0,0.6);
   z-index: 999;
   max-height: 250px;
   overflow-y: auto;
@@ -728,16 +830,21 @@ body {
 
 /* State card on the Locations page */
 .loc-card {
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   padding: 20px;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  transition: transform 0.25s var(--ease-glass), box-shadow 0.25s var(--ease-glass), border-color 0.25s var(--ease-glass);
+  box-shadow: var(--glass-sheen), 0 1px 3px rgba(0, 0, 0, 0.55);
+  animation: fadeSlideUp 0.4s var(--ease-glass) both;
 }
 .loc-card:hover {
   border-color: var(--primary-accent);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card-hover), 0 0 0 1px rgba(226, 92, 36, 0.3);
 }
 
 /* Small count pill (e.g. "3 Districts") */
@@ -765,12 +872,21 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  background: var(--glass-bg-soft);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
   padding: 12px 14px;
   font-size: 0.9rem;
   color: var(--text-dark);
+  transition: transform 0.18s var(--ease-glass), border-color 0.18s var(--ease-glass), box-shadow 0.18s var(--ease-glass);
+  animation: fadeSlideUp 0.4s var(--ease-glass) both;
+}
+.city-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary-accent);
+  box-shadow: 0 8px 18px -8px rgba(0, 0, 0, 0.6);
 }
 
 /* Pagination bar under the contacts table */
@@ -806,6 +922,8 @@ body {
 .page-btn:hover:not(:disabled) {
   border-color: var(--primary-accent);
   color: var(--primary-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.55);
 }
 .page-btn:disabled {
   opacity: 0.5;
@@ -823,11 +941,23 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   padding: 18px 20px;
+  box-shadow: var(--glass-sheen);
+  transition: transform 0.25s var(--ease-glass), box-shadow 0.25s var(--ease-glass), border-color 0.25s var(--ease-glass);
+  animation: fadeSlideUp 0.45s var(--ease-glass) both;
 }
+.stat-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--primary-accent);
+  box-shadow: var(--glass-sheen), var(--shadow-card-hover);
+}
+.stat-card:hover .stat-icon { transform: scale(1.06); }
+.stat-icon { transition: transform 0.2s; }
 .stat-icon {
   display: flex;
   align-items: center;
@@ -894,11 +1024,13 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 14px 16px;
   padding: 18px;
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.75);
-  animation: filter-drop 0.14s ease-out;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 14px;
+  box-shadow: var(--glass-sheen), 0 20px 40px -12px rgba(0, 0, 0, 0.75);
+  animation: filter-drop 0.22s var(--ease-glass);
 }
 @keyframes filter-drop {
   from { opacity: 0; transform: translateY(-6px); }
@@ -935,7 +1067,7 @@ body {
   height: 18px;
   padding: 0 5px;
   margin-left: 4px;
-  background: var(--primary-accent);
+  background: var(--gradient-accent);
   color: #fff;
   border-radius: 999px;
   font-size: 0.7rem;
@@ -992,9 +1124,12 @@ textarea.input-error-field {
 
 /* ── Import Page Styles ──────────────────────── */
 .import-card {
-  background: var(--bg-white);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow: var(--glass-sheen), var(--glass-shadow);
   padding: 32px;
   display: flex;
   flex-direction: column;
@@ -1167,7 +1302,7 @@ textarea.input-error-field {
   box-shadow: inset 0 0 0 1px var(--primary-accent);
 }
 .cal-day.is-selected {
-  background: var(--primary-accent);
+  background: var(--gradient-accent);
   color: #fff;
   font-weight: 700;
 }
@@ -1195,7 +1330,7 @@ textarea.input-error-field {
   cursor: pointer;
 }
 .cal-month:hover { background: var(--border-color); }
-.cal-month.is-current { background: var(--primary-accent); color: #fff; }
+.cal-month.is-current { background: var(--gradient-accent); color: #fff; }
 
 /* From/To readout above the grid */
 .cal-readout {
@@ -1274,8 +1409,9 @@ textarea.input-error-field {
   width: 44px; height: 44px;
   flex-shrink: 0;
   border-radius: 12px;
-  background: var(--accent-fill);
+  background: var(--gradient-accent);
   color: #fff;
+  box-shadow: var(--shadow-accent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1861,8 +1997,10 @@ html.modal-open .main-content {
   top: -24px;                 /* cancel the container's top padding */
   margin: -24px -28px 20px;
   padding: 20px 28px;
-  background: var(--bg-white);
-  border-bottom: 1px solid var(--border-color);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border);
   /* Above the select menu (z 999) so an open dropdown near the top tucks
      under the header when scrolled, instead of painting over it. */
   z-index: 1001;
@@ -1915,9 +2053,9 @@ html.modal-open .main-content {
   font-family: inherit;
   font-size: 0.85rem;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.product-add-pill:hover { color: var(--accent-text); border-color: var(--primary-accent); }
+.product-add-pill:hover { color: var(--accent-text); border-color: var(--primary-accent); background: var(--gradient-accent-soft); }
 .product-add-inline {
   display: inline-flex;
   align-items: center;
@@ -1996,7 +2134,7 @@ html.modal-open .main-content {
   cursor: pointer;
 }
 .report-preset:hover { color: var(--text-dark); border-color: var(--primary-accent); }
-.report-preset.active { background: var(--accent-fill); color: #fff; border-color: var(--accent-fill); }
+.report-preset.active { background: var(--gradient-accent); color: #fff; border-color: var(--accent-fill); }
 .report-custom { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
 .report-custom label { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); }
 .report-custom input {
@@ -2012,10 +2150,15 @@ html.modal-open .main-content {
 }
 .report-card {
   padding: 14px 16px;
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
+  background: var(--glass-bg-soft);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
   border-radius: 12px;
+  box-shadow: var(--glass-sheen);
+  transition: transform 0.2s var(--ease-glass), border-color 0.2s var(--ease-glass);
 }
+.report-card:hover { transform: translateY(-2px); border-color: var(--glass-border-strong); }
 .report-card.tone-green { background: #0F2A1E; border-color: #1C4532; }
 .report-card.tone-amber { background: #2A2010; border-color: #4A3A1A; }
 .report-card-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
@@ -2252,9 +2395,9 @@ html.modal-open .main-content {
   background: transparent;
   color: var(--accent-text);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
 }
-.add-mini-btn:hover { background: var(--accent-fill); color: #fff; }
+.add-mini-btn:hover { background: var(--gradient-accent); color: #fff; transform: scale(1.1); }
 
 /* ---- Compact the entry form: narrower + less scrolling ------------------- */
 /* All scoped to the entry modal so other forms (Settings, Import) keep their
@@ -2278,3 +2421,71 @@ html.modal-open .main-content {
 
 /* Phone rows stack under Phone 1; keep them a sensible width, not full-modal. */
 .phone-row { max-width: 400px; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Liquid-glass motion system — entrances, staggers, ghost loading.
+   ═══════════════════════════════════════════════════════════════════════ */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes modalPopIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes overlayFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Staggered reveal so card grids cascade in instead of snapping. */
+.stat-card:nth-child(1) { animation-delay: 0.02s; }
+.stat-card:nth-child(2) { animation-delay: 0.08s; }
+.stat-card:nth-child(3) { animation-delay: 0.14s; }
+.stat-card:nth-child(4) { animation-delay: 0.20s; }
+.stat-card:nth-child(5) { animation-delay: 0.26s; }
+.loc-card:nth-child(1) { animation-delay: 0.02s; }
+.loc-card:nth-child(2) { animation-delay: 0.06s; }
+.loc-card:nth-child(3) { animation-delay: 0.10s; }
+.loc-card:nth-child(4) { animation-delay: 0.14s; }
+.loc-card:nth-child(5) { animation-delay: 0.18s; }
+.loc-card:nth-child(6) { animation-delay: 0.22s; }
+
+/* Page headers / toolbars ease in with the content. */
+.entry-toolbar-title,
+.page-header { animation: fadeSlideUp 0.4s var(--ease-glass) both; }
+
+/* Frosted table header that blends with the glass container. */
+.data-table thead th {
+  background: rgba(28, 28, 27, 0.72);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Snappier, springier row hover. */
+.row-clickable { transition: background 0.16s var(--ease-glass), box-shadow 0.16s var(--ease-glass); }
+
+/* ── Ghost / skeleton loading — snappier sweep + reusable shapes. ── */
+.shimmer-block { animation: shimmer 1.3s infinite linear; }
+.skeleton-stat  { height: 82px;  border-radius: 14px; }
+.skeleton-card  { height: 120px; border-radius: 14px; }
+.skeleton-line  { height: 14px;  border-radius: 6px; }
+
+/* Respect users who ask for less motion: keep the colour/gradient changes but
+   drop the movement (lifts, scales) and long transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+  .btn-primary:hover,
+  .btn:not(.btn-primary):not(.btn-link):hover,
+  .loc-card:hover,
+  .stat-card:hover,
+  .city-card:hover,
+  .page-btn:hover:not(:disabled),
+  .stat-card:hover .stat-icon,
+  .add-mini-btn:hover {
+    transform: none;
+  }
+}
