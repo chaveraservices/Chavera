@@ -349,8 +349,10 @@ export default function ContactsPage() {
             className="btn"
             onClick={() => setShowMoreFilters(o => !o)}
             style={{
-              border: '1px solid var(--border-color)',
-              background: (showMoreFilters || hasActiveFilters) ? 'var(--highlight)' : 'var(--bg-white)',
+              border: '1px solid var(--glass-border)',
+              background: (showMoreFilters || hasActiveFilters) ? 'var(--highlight)' : 'var(--glass-bg-soft)',
+              backdropFilter: 'var(--glass-blur)',
+              WebkitBackdropFilter: 'var(--glass-blur)',
               color: (showMoreFilters || hasActiveFilters) ? 'var(--accent-text)' : 'var(--text-dark)',
             }}
           >
@@ -368,13 +370,13 @@ export default function ContactsPage() {
           )}
           {isAdmin && (
             <button className="btn" onClick={handleExport} disabled={exporting}
-              style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
+              style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-bg-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', color: 'var(--text-dark)' }}>
               <Download size={16} /> {exporting ? 'Exporting…' : `Export${hasActiveFilters ? ` (${total})` : ''}`}
             </button>
           )}
           {isAdmin && (
             <button className="btn" onClick={() => navigate('/import')}
-              style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}>
+              style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-bg-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', color: 'var(--text-dark)' }}>
               <Upload size={16} /> Import
             </button>
           )}

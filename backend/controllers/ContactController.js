@@ -80,6 +80,16 @@ const nextEntryNo = async () => {
     return (top?.entry_no || 0) + 1;
 };
 
+// True if some other entry already carries this number. `excludeId` skips the
+// entry being edited, so re-saving a record without changing its number is fine.
+// Guards the manual-override path against duplicate entry numbers.
+const entryNoTaken = async (no, excludeId = null) => {
+    const query = { entry_no: no };
+    if (excludeId) query._id = { $ne: excludeId };
+    const hit = await Contact.findOne(query).select('_id').lean();
+    return !!hit;
+};
+
 // Builds the $expr for a [from, to] window. Dates arrive as 'YYYY-MM-DD' and are
 // interpreted in server-local time, inclusive of the whole `to` day. Returns
 // null when no usable bound was supplied, so callers can skip the stage.
@@ -303,7 +313,7 @@ export default class ContactController {
     }
 
     async insert(req, res, next) {
-        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, phones, category, customer_grade, house_type, purchase_type, products, product_quantities, series_code, contact_date, notes } = req.body;
+        let { honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark, village_town, mandal, district, state, pincode, phone_1, phone_2, phones, category, customer_grade, house_type, purchase_type, products, product_quantities, series_code, contact_date, notes, entry_no } = req.body;
 
         // Trim required string fields before validation
         full_name = (full_name || '').trim();
@@ -332,8 +342,19 @@ export default class ContactController {
         // later renamed or removed. The JWT carries no name, so read it once.
         const creator = req.user?.id ? await User.findById(req.user.id).select('name').lean() : null;
 
+        // Respect a hand-entered entry number (manual override); otherwise
+        // auto-assign the next one in sequence.
+        const providedEntryNo = Number(entry_no);
+        const usingProvided = Number.isInteger(providedEntryNo) && providedEntryNo > 0;
+        // Guard against duplicates only on the manual path — auto-assigned
+        // numbers are max+1 and unique by construction.
+        if (usingProvided && await entryNoTaken(providedEntryNo)) {
+            throw new ApiError(409, `Entry number ${providedEntryNo} is already used by another entry.`);
+        }
+        const finalEntryNo = usingProvided ? providedEntryNo : await nextEntryNo();
+
         const newContact = new Contact({
-            entry_no: await nextEntryNo(),
+            entry_no: finalEntryNo,
             series_code: cleanSeriesCode(series_code),
             honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark,
             village_town, mandal, district, state, pincode, phone_1, phone_2: secondPhone, phones: cleanPhones, category,
@@ -431,6 +452,18 @@ export default class ContactController {
         if (updates.series_code !== undefined) {
             updates.series_code = cleanSeriesCode(updates.series_code);
         }
+        // A hand-edited entry number must be a positive whole number, and can't
+        // collide with another entry's number.
+        if (updates.entry_no !== undefined) {
+            const n = Number(updates.entry_no);
+            if (!Number.isInteger(n) || n <= 0) {
+                throw new ApiError(400, 'Entry number must be a positive whole number');
+            }
+            if (await entryNoTaken(n, id)) {
+                throw new ApiError(409, `Entry number ${n} is already used by another entry.`);
+            }
+            updates.entry_no = n;
+        }
 
         // Trim required string fields
         if (updates.full_name !== undefined) updates.full_name = updates.full_name.trim();
@@ -469,6 +502,19 @@ export default class ContactController {
         const n = await nextEntryNo();
         res.locals.data = { entry_no: n };
         res.locals.message = 'Next entry number';
+        next();
+    }
+
+    // Whether an entry number is already taken (optionally excluding the entry
+    // being edited), so the form can warn before the user submits.
+    async checkEntryNo(req, res, next) {
+        const n = Number(req.body?.entry_no);
+        const excludeId = req.body?.id || null;
+        const taken = Number.isInteger(n) && n > 0
+            ? await entryNoTaken(n, excludeId)
+            : false;
+        res.locals.data = { taken };
+        res.locals.message = 'Entry number status';
         next();
     }
 
