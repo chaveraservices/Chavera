@@ -54,11 +54,11 @@ export default function LoginPage({ onLogin }) {
         <div style={{ fontSize: '0.85rem' }}>Designed and Developed by</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <a href="https://www.zeeniith.in" target="_blank" rel="noopener noreferrer" style={{ display: 'flex' }}>
-            <img src="/Header_logo_lightMode.png" alt="Zeeniith Technology" style={{ height: '50px', objectFit: 'contain' }} />
+            <img src="/Header_logo_DarkMode.png" alt="Zeeniith Technology" style={{ height: '50px', objectFit: 'contain' }} />
           </a>
           <span>&</span>
           <a href="https://www.quikwink.com" target="_blank" rel="noopener noreferrer" style={{ display: 'flex' }}>
-            <img src="/favicon.ico" alt="QuikWink" style={{ height: '50px', objectFit: 'contain' }} />
+            <img src="/favicon.ico" alt="QuikWink" style={{ height: '70px', objectFit: 'contain' }} />
           </a>
         </div>
       </div>
