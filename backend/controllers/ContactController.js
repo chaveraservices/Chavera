@@ -163,9 +163,11 @@ export default class ContactController {
         const page = Math.max(1, parseInt(req.body?.page, 10) || 1);
         const pageSize = Math.min(200, Math.max(1, parseInt(req.body?.pageSize, 10) || 25));
 
+        // Newest entry first: the last entry made (highest entry_no) tops the
+        // list. createdAt is the tiebreaker / fallback for legacy rows that have
+        // no entry_no (those sort to the bottom).
         const items = await Contact.find(query)
-            .collation({ locale: 'en' })
-            .sort({ full_name: 1 })
+            .sort({ entry_no: -1, createdAt: -1 })
             .skip((page - 1) * pageSize)
             .limit(pageSize);
 
