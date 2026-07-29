@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 export default function AlertModal({ isOpen, title = 'Alert', message, onClose, type = 'error' }) {
   if (!isOpen) return null;
 
-  const headerColor = type === 'error' ? '#DC2626' : (type === 'success' ? '#059669' : 'var(--text-dark)');
+  const headerColor = type === 'error' ? 'var(--danger)' : (type === 'success' ? '#34D399' : 'var(--text-dark)');
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>

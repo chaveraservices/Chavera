@@ -1,25 +1,71 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import api from '../utils/api';
 import useDebounce from '../utils/useDebounce';
 import { contactsToExportRows } from '../utils/contactFields';
-import { Search, Bell, User as UserIcon, Download, Trash2, X, Printer } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, Download, Upload, X, SlidersHorizontal } from 'lucide-react';
 import CustomSelect from '../components/CustomSelect';
 import AlertModal from '../components/AlertModal';
+import EntryDetailModal from '../components/EntryDetailModal';
+import EntryFormModal from '../components/EntryFormModal';
+import { useAuth } from '../context/AuthContext';
+import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, CATEGORY_OPTIONS } from '../utils/contactFields';
+import useProducts from '../utils/useProducts';
 
-export default function ContactsPage({ onAdd, onEdit }) {
+// "Cot ×3, Sofa set" — quantity shown only when it's more than one.
+const productListWithQty = (products, qtys) =>
+  (Array.isArray(products) ? products : [])
+    .map(p => { const q = qtys && qtys[p]; return q && q > 1 ? `${p} ×${q}` : p; })
+    .join(', ');
+
+export default function ContactsPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [contacts, setContacts] = useState([]); // current page only
   const [total, setTotal] = useState(0);        // matching count (server)
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
   const [contactToDelete, setContactToDelete] = useState(null);
   const [exporting, setExporting] = useState(false);
-  const [printing, setPrinting] = useState(false);
-  const [alertConfig, setAlertConfig] = useState({ isOpen: false, message: '', type: 'error' });
+  const [alertConfig, setAlertConfig] = useState({ isOpen: false, title: '', message: '', type: 'error' });
+  const [detailContact, setDetailContact] = useState(null); // row-click detail modal
+  const [formState, setFormState] = useState({ open: false, contact: null }); // entry form modal
+  const openNew = () => setFormState({ open: true, contact: null });
+  const openEdit = (c) => setFormState({ open: true, contact: c });
+  const closeForm = () => setFormState({ open: false, contact: null });
+
+  // #4: press Space anywhere on the Entry screen to start a new entry — as long
+  // as you're not typing in a field and nothing is already open on top.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+      if (formState.open || detailContact) return;                 // already in a modal
+      const el = document.activeElement;
+      const tag = (el?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || el?.isContentEditable) return;
+      if (el?.closest?.('[role="combobox"], [role="dialog"]')) return; // in a dropdown/modal
+      e.preventDefault();
+      openNew();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [formState.open, detailContact]);
+  const filterPanelRef = useRef(null);
+  const filterBtnRef = useRef(null);
+
+  // Staff may create and edit entries but not delete, import, or export.
+  const { user } = useAuth();
+  const isAdmin = (user?.role || 'admin') === 'admin';
+  const { products: productCatalogue } = useProducts();
 
   // Filter options (distinct values from the server)
   const [tuples, setTuples] = useState([]);        // [{state, district, city}]
   const [categories, setCategories] = useState([]);
+  const [grades, setGrades] = useState([]);
+  const [houseTypes, setHouseTypes] = useState([]);
+  const [purchaseTypes, setPurchaseTypes] = useState([]);
+  const [products, setProducts] = useState([]);
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,6 +74,12 @@ export default function ContactsPage({ onAdd, onEdit }) {
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedHouseType, setSelectedHouseType] = useState('');
+  const [selectedPurchaseType, setSelectedPurchaseType] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [yearsAgo, setYearsAgo] = useState('');  // "bought N years ago" bucket
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -42,19 +94,73 @@ export default function ContactsPage({ onAdd, onEdit }) {
     district: selectedDistrict,
     city: selectedCity,
     category: selectedCategory,
-  }), [debouncedSearch, selectedState, selectedDistrict, selectedCity, selectedCategory]);
+    customer_grade: selectedGrade,
+    house_type: selectedHouseType,
+    purchase_type: selectedPurchaseType,
+    product: selectedProduct,
+    years_ago: yearsAgo,
+  }), [debouncedSearch, selectedState, selectedDistrict, selectedCity, selectedCategory,
+    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, yearsAgo]);
 
   // Load distinct filter options once (and after mutations).
   useEffect(() => {
     api.post('/contact/filter-options')
       .then(res => {
         if (res.data.success) {
-          setTuples(res.data.data.tuples || []);
-          setCategories(res.data.data.categories || []);
+          const d = res.data.data;
+          setTuples(d.tuples || []);
+          setCategories(d.categories || []);
+          setGrades(d.grades || []);
+          setHouseTypes(d.houseTypes || []);
+          setPurchaseTypes(d.purchaseTypes || []);
+          setProducts(d.products || []);
         }
       })
       .catch(err => console.error(err));
   }, [refreshTick]);
+
+  // Pre-apply filters passed in the URL (e.g. from the Dashboard drill-down).
+  useEffect(() => {
+    const setters = {
+      product: setSelectedProduct,
+      category: setSelectedCategory,
+      customer_grade: setSelectedGrade,
+      house_type: setSelectedHouseType,
+      purchase_type: setSelectedPurchaseType,
+      state: setSelectedState,
+      district: setSelectedDistrict,
+      city: setSelectedCity,
+    };
+    let applied = false;
+    for (const [key, setter] of Object.entries(setters)) {
+      const v = searchParams.get(key);
+      if (v) { setter(v); applied = true; }
+    }
+    // Filters from a drill-down are applied, but the panel stays CLOSED —
+    // arriving from the pie chart shouldn't dump you into an open filter panel.
+    void applied;
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Floating filter panel: close on Esc or an outside click. Deliberately no
+  // scrim overlay — a full-viewport catcher also swallows wheel events, which
+  // stopped the page scrolling while the panel was open.
+  useEffect(() => {
+    if (!showMoreFilters) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShowMoreFilters(false); };
+    const onDown = (e) => {
+      if (filterPanelRef.current?.contains(e.target)) return;
+      if (filterBtnRef.current?.contains(e.target)) return; // let the button toggle
+      setShowMoreFilters(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [showMoreFilters]);
 
   // Reset to page 1 whenever filters or page size change.
   useEffect(() => {
@@ -94,15 +200,20 @@ export default function ContactsPage({ onAdd, onEdit }) {
     [tuples, selectedState, selectedDistrict]
   );
 
+  // Fixed-vocabulary filters always offer their standard options (merged with any
+  // extra values already present in the data), so they work even before data exists.
+  const mergeOpts = (fixed, fromData) => [...new Set([...fixed, ...fromData])];
+  const gradeOptions = mergeOpts(CUSTOMER_GRADES, grades);
+  const houseOptions = mergeOpts(HOUSE_TYPES, houseTypes);
+  const purchaseOptions = mergeOpts(PURCHASE_TYPES, purchaseTypes);
+  const productOptions = mergeOpts(productCatalogue, products);
+  const categoryOptions = mergeOpts(CATEGORY_OPTIONS, categories);
+
   // Pagination math (driven by server total)
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
   const rangeStart = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const rangeEnd = Math.min(currentPage * pageSize, total);
-
-  const handleDeleteClick = (contact) => {
-    setContactToDelete(contact);
-  };
 
   const confirmDelete = async () => {
     if (!contactToDelete) return;
@@ -122,75 +233,14 @@ export default function ContactsPage({ onAdd, onEdit }) {
     }
   };
 
-  const handlePrint = async () => {
-    setPrinting(true);
+  // Cancel bill (or restore). Kept as a soft flag on the entry.
+  const handleCancel = async (c, cancelled) => {
     try {
-      // Pull the full matching set (ignores pagination) for the print.
-      const res = await api.post('/contact/list', { all: true, ...filterParams });
-      const source = res.data?.data?.items || [];
-      if (source.length === 0) { 
-        setAlertConfig({ isOpen: true, message: 'No contacts to print', type: 'error' });
-        return; 
-      }
-
-      // Create an iframe to print
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
-
-      const htmlContent = `
-        <html>
-          <head>
-            <title>Print Contacts</title>
-            <style>
-              body { font-family: sans-serif; padding: 20px; color: #333; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-              th { background-color: #f8fafc; font-weight: 600; }
-              h1 { text-align: center; color: #1a365d; }
-              @media print {
-                @page { margin: 20px; }
-              }
-            </style>
-          </head>
-          <body>
-            <h1>Contact Directory</h1>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Address</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${source.map(contact => {
-                  const name = contact.full_name + (contact.business_name ? " (" + contact.business_name + ")" : "");
-                  const address = [contact.door_flat_no, contact.street, contact.village_town, contact.district, contact.state, contact.pincode].filter(Boolean).join(', ');
-                  return "<tr><td>" + name + "</td><td>" + address + "</td></tr>";
-                }).join('')}
-              </tbody>
-            </table>
-          </body>
-        </html>
-      `;
-
-      iframe.contentDocument.open();
-      iframe.contentDocument.write(htmlContent);
-      iframe.contentDocument.close();
-
-      // Wait for iframe content to render before printing
-      setTimeout(() => {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-        }, 1000);
-      }, 500);
-
+      await api.post('/contact/cancel', { id: c._id, cancelled });
+      setDetailContact(null);
+      setRefreshTick(t => t + 1);
     } catch (err) {
-      setAlertConfig({ isOpen: true, message: err.response?.data?.message || 'Failed to prepare print', type: 'error' });
-    } finally {
-      setPrinting(false);
+      setAlertConfig({ isOpen: true, message: err.response?.data?.message || 'Failed to update the entry', type: 'error' });
     }
   };
 
@@ -201,7 +251,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
       const res = await api.post('/contact/list', { all: true, ...filterParams });
       const source = res.data?.data?.items || [];
       if (source.length === 0) { 
-        setAlertConfig({ isOpen: true, message: 'No contacts to export', type: 'error' });
+        setAlertConfig({ isOpen: true, title: 'Nothing to Export', message: 'No contacts match the current filters, so there is nothing to export.', type: 'info' });
         return; 
       }
 
@@ -223,191 +273,235 @@ export default function ContactsPage({ onAdd, onEdit }) {
     setSelectedDistrict('');
     setSelectedCity('');
     setSelectedCategory('');
+    setSelectedGrade('');
+    setSelectedHouseType('');
+    setSelectedPurchaseType('');
+    setSelectedProduct('');
+    setYearsAgo('');
+    // Drop any drill-down params left in the URL by the Dashboard, so the
+    // address bar matches the (now empty) filter state.
+    if (searchParams.toString()) setSearchParams({}, { replace: true });
   };
 
-  const hasActiveFilters = searchQuery || selectedState || selectedDistrict || selectedCity || selectedCategory;
+  const hasActiveFilters = searchQuery || selectedState || selectedDistrict || selectedCity ||
+    selectedCategory || selectedGrade || selectedHouseType ||
+    selectedPurchaseType || selectedProduct || yearsAgo;
+
+  const activeFilterCount = [selectedState, selectedDistrict, selectedCity, selectedCategory,
+    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, yearsAgo]
+    .filter(Boolean).length + (searchQuery ? 1 : 0);
+
+  // Fixed five-column registry. The client asked for a compact table — every
+  // other field lives in the detail modal, opened by clicking a row.
+  const columnDefs = {
+    id: { label: '#', render: c => <span className="cell-id">{c.entry_no != null ? c.entry_no : '—'}</span> },
+    name: {
+      label: 'NAME',
+      render: c => (
+        <>
+          <div style={{ fontWeight: 600 }}>
+            {c.honorific ? `${c.honorific} ` : ''}{c.full_name}
+            {c.cancelled && <span className="badge is-cancelled" style={{ marginLeft: 8 }}>Cancelled</span>}
+          </div>
+          {c.business_name && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{c.business_name}</div>}
+        </>
+      ),
+    },
+    products: {
+      label: 'PRODUCT',
+      render: c => (Array.isArray(c.products) && c.products.length) ? productListWithQty(c.products, c.product_quantities) : '—',
+    },
+    location: {
+      label: 'LOCATION',
+      render: c => `${c.village_town || ''}${c.district ? `, ${c.district}` : ''}` || '—',
+    },
+    phone: {
+      label: 'PHONE',
+      render: c => c.phone_1 || '—',
+    },
+  };
+
+  const visibleColumns = ['id', 'name', 'products', 'location', 'phone'];
+  const colCount = visibleColumns.length;
 
   return (
     <>
-      <div style={{ padding: '24px 32px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-dark)' }}>Directory</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>Manage and filter all your enterprise contacts</p>
+      {/* Single toolbar row: title, search, then actions. */}
+      <div className="entry-toolbar">
+        <div className="entry-toolbar-title">
+          <h1>Entry</h1>
+          <p>Click any row to see the full entry</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div className="search-bar" style={{ margin: 0, width: '280px', background: 'white' }}>
-            <Search size={16} color="var(--text-muted)" />
-            <input
-              type="text"
-              placeholder="Search name, phone, business…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div style={{ cursor: 'pointer', color: 'var(--text-muted)' }}><Bell size={20} /></div>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <UserIcon size={18} color="white" />
-          </div>
+
+        <div className="search-bar entry-toolbar-search">
+          <Search size={16} color="var(--text-muted)" />
+          <input
+            type="text"
+            placeholder="Search name, phone, business…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
         </div>
-      </div>
 
-      <div style={{ padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, borderBottom: '1px solid var(--border-color)' }}>
-        <div className="filters-group" style={{ flex: 1 }}>
-          <CustomSelect
-            className="select-input"
-            value={selectedState}
-            onChange={e => { setSelectedState(e.target.value); setSelectedDistrict(''); setSelectedCity(''); }}
-            options={[
-              { label: 'All States', value: '' },
-              ...uniqueStates.map(s => ({ label: s, value: s }))
-            ]}
-            placeholder="All States"
-          />
-
-          <CustomSelect
-            className="select-input"
-            value={selectedDistrict}
-            onChange={e => { setSelectedDistrict(e.target.value); setSelectedCity(''); }}
-            options={[
-              { label: 'All Districts', value: '' },
-              ...uniqueDistricts.map(d => ({ label: d, value: d }))
-            ]}
-            placeholder="All Districts"
-          />
-
-          <CustomSelect
-            className="select-input"
-            value={selectedCity}
-            onChange={e => setSelectedCity(e.target.value)}
-            options={[
-              { label: 'All Cities', value: '' },
-              ...uniqueCities.map(c => ({ label: c, value: c }))
-            ]}
-            placeholder="All Cities"
-          />
-
-          <CustomSelect
-            className="select-input"
-            value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
-            options={[
-              { label: 'All Categories', value: '' },
-              ...categories.map(cat => ({ label: cat, value: cat }))
-            ]}
-            placeholder="All Categories"
-          />
-
+        <div className="entry-toolbar-actions">
+          <button
+            ref={filterBtnRef}
+            className="btn"
+            onClick={() => setShowMoreFilters(o => !o)}
+            style={{
+              border: '1px solid var(--glass-border)',
+              background: (showMoreFilters || hasActiveFilters) ? 'var(--highlight)' : 'var(--glass-bg-soft)',
+              backdropFilter: 'var(--glass-blur)',
+              WebkitBackdropFilter: 'var(--glass-blur)',
+              color: (showMoreFilters || hasActiveFilters) ? 'var(--accent-text)' : 'var(--text-dark)',
+            }}
+          >
+            <SlidersHorizontal size={16} /> Filters
+            {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
+          </button>
           {hasActiveFilters && (
             <button
               className="btn-link"
               onClick={clearFilters}
-              style={{ color: '#EF4444', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
+              style={{ color: 'var(--danger)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
             >
-              <X size={14} /> Clear
+              <X size={14} /> Clear all
             </button>
           )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button
-            className="btn"
-            onClick={handlePrint}
-            disabled={printing}
-            style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}
-          >
-            <Printer size={16} /> {printing ? 'Preparing…' : 'Print'}
-          </button>
-          <button
-            className="btn"
-            onClick={handleExport}
-            disabled={exporting}
-            style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}
-          >
-            <Download size={16} /> {exporting ? 'Exporting…' : `Export${hasActiveFilters ? ` (${total})` : ''}`}
-          </button>
-          <button className="btn btn-primary" onClick={onAdd}>+ Add Contact</button>
+          {isAdmin && (
+            <button className="btn" onClick={handleExport} disabled={exporting}
+              style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-bg-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', color: 'var(--text-dark)' }}>
+              <Download size={16} /> {exporting ? 'Exporting…' : `Export${hasActiveFilters ? ` (${total})` : ''}`}
+            </button>
+          )}
+          {isAdmin && (
+            <button className="btn" onClick={() => navigate('/import')}
+              style={{ border: '1px solid var(--glass-border)', background: 'var(--glass-bg-soft)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', color: 'var(--text-dark)' }}>
+              <Upload size={16} /> Import
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={openNew}>+ New Entry</button>
         </div>
       </div>
 
-      {/* Results summary */}
-      {hasActiveFilters && !loading && (
-        <div style={{ padding: '0 32px 8px 32px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          Found <strong>{total}</strong> matching {total === 1 ? 'contact' : 'contacts'}
-        </div>
-      )}
+      {/* Filters float over the table rather than displacing it — pushing the
+          content down on every toggle made the whole page jump. */}
+      <div className="filter-host">
+        {showMoreFilters && (
+          <div className="filter-panel" ref={filterPanelRef}>
+            <div className="filter-field">
+              <label>State</label>
+              <CustomSelect value={selectedState}
+                onChange={e => { setSelectedState(e.target.value); setSelectedDistrict(''); setSelectedCity(''); }}
+                options={[{ label: 'All States', value: '' }, ...uniqueStates.map(s => ({ label: s, value: s }))]}
+                placeholder="All States" />
+            </div>
+            <div className="filter-field">
+              <label>District</label>
+              <CustomSelect value={selectedDistrict}
+                onChange={e => { setSelectedDistrict(e.target.value); setSelectedCity(''); }}
+                options={[{ label: 'All Districts', value: '' }, ...uniqueDistricts.map(d => ({ label: d, value: d }))]}
+                placeholder="All Districts" />
+            </div>
+            <div className="filter-field">
+              <label>City</label>
+              <CustomSelect value={selectedCity} onChange={e => setSelectedCity(e.target.value)}
+                options={[{ label: 'All Cities', value: '' }, ...uniqueCities.map(c => ({ label: c, value: c }))]}
+                placeholder="All Cities" />
+            </div>
+            <div className="filter-field">
+              <label>Category / Type</label>
+              <CustomSelect value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}
+                options={[{ label: 'All Types', value: '' }, ...categoryOptions.map(c => ({ label: c, value: c }))]}
+                placeholder="All Types" />
+            </div>
+            <div className="filter-field">
+              <label>Customer Grade</label>
+              <CustomSelect value={selectedGrade} onChange={e => setSelectedGrade(e.target.value)}
+                options={[{ label: 'All Grades', value: '' }, ...gradeOptions.map(g => ({ label: g, value: g }))]}
+                placeholder="All Grades" />
+            </div>
+            <div className="filter-field">
+              <label>Type of House</label>
+              <CustomSelect value={selectedHouseType} onChange={e => setSelectedHouseType(e.target.value)}
+                options={[{ label: 'All', value: '' }, ...houseOptions.map(h => ({ label: h, value: h }))]}
+                placeholder="All" />
+            </div>
+            <div className="filter-field">
+              <label>Type of Purchase</label>
+              <CustomSelect value={selectedPurchaseType} onChange={e => setSelectedPurchaseType(e.target.value)}
+                options={[{ label: 'All', value: '' }, ...purchaseOptions.map(p => ({ label: p, value: p }))]}
+                placeholder="All" />
+            </div>
+            <div className="filter-field">
+              <label>Products</label>
+              <CustomSelect value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)}
+                options={[{ label: 'All Products', value: '' }, ...productOptions.map(p => ({ label: p, value: p }))]}
+                placeholder="All Products" />
+            </div>
+            <div className="filter-field">
+              <label>Purchased</label>
+              <CustomSelect value={yearsAgo} onChange={e => setYearsAgo(e.target.value)}
+                options={[
+                  { label: 'Any time', value: '' },
+                  { label: '2 years ago', value: '2' },
+                  { label: '3 years ago', value: '3' },
+                  { label: '4 years ago', value: '4' },
+                  { label: '5 years ago', value: '5' },
+                  { label: '6 years ago', value: '6' },
+                ]}
+                placeholder="Any time" />
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="page-container">
-        <div className="table-container">
+        <div className="table-container" style={{ opacity: loading && contacts.length > 0 ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
           <table className="data-table">
             <thead>
               <tr>
-                <th>NAME</th>
-                <th>RELATION</th>
-                <th>LOCATION</th>
-                <th>PHONE</th>
-                <th>TYPE</th>
-                <th>ACTIONS</th>
+                {visibleColumns.map((key) => {
+                  const col = columnDefs[key];
+                  return (
+                    <th key={key} className={key === 'id' ? 'th-id' : undefined}>
+                      <span>{col.label}</span>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {loading && contacts.length === 0 ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '80%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '60%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '90%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '20px', width: '70%' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '24px', width: '80px', borderRadius: '12px' }}></div></td>
-                    <td><div className="shimmer-block" style={{ height: '24px', width: '50px' }}></div></td>
+                    {Array.from({ length: colCount }).map((__, j) => (
+                      <td key={j}><div className="shimmer-block" style={{ height: '20px', width: '75%' }}></div></td>
+                    ))}
                   </tr>
                 ))
               ) : total === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={colCount} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     {hasActiveFilters ? 'No contacts match your filters.' : 'No contacts found.'}
                   </td>
                 </tr>
               ) : (
                 contacts.map(contact => (
-                  <tr key={contact._id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{contact.honorific ? `${contact.honorific} ` : ''}{contact.full_name}</div>
-                      {contact.business_name && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{contact.business_name}</div>}
-                    </td>
-                    <td>{contact.relation || '-'}</td>
-                    <td>{contact.village_town}{contact.district ? `, ${contact.district}` : ''}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {contact.phone_1}
-                      </div>
-                    </td>
-                    <td>
-                      {contact.category && (
-                        <span className={`badge ${contact.category.toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>
-                          {contact.category}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <button
-                          className="btn-link"
-                          onClick={() => onEdit(contact)}
-                          style={{ fontWeight: 600, color: 'var(--primary-accent)', padding: 0 }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn-link"
-                          onClick={() => setContactToDelete(contact)}
-                          disabled={deletingId === contact._id}
-                          style={{ padding: 0, color: deletingId === contact._id ? '#CBD5E1' : '#DC2626', display: 'flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <Trash2 size={15} />
-                          {deletingId === contact._id ? '…' : 'Delete'}
-                        </button>
-                      </div>
-                    </td>
+                  <tr
+                    key={contact._id}
+                    className={`row-clickable ${contact.cancelled ? 'row-cancelled' : ''}`}
+                    onClick={() => setDetailContact(contact)}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open entry ${contact.entry_no ?? ''} ${contact.full_name}`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailContact(contact); }
+                    }}
+                  >
+                    {visibleColumns.map(key => (
+                      <td key={key} className={key === 'id' ? 'td-id' : undefined}>{columnDefs[key].render(contact)}</td>
+                    ))}
                   </tr>
                 ))
               )}
@@ -485,7 +579,7 @@ export default function ContactsPage({ onAdd, onEdit }) {
                 <button 
                   className="btn btn-primary" 
                   onClick={confirmDelete} 
-                  style={{ background: '#DC2626' }}
+                  style={{ background: 'var(--danger)' }}
                   disabled={deletingId}
                 >
                   {deletingId ? 'Deleting...' : 'Delete Contact'}
@@ -496,12 +590,29 @@ export default function ContactsPage({ onAdd, onEdit }) {
         </div>
       )}
 
+      <EntryFormModal
+        open={formState.open}
+        contact={formState.contact}
+        onClose={closeForm}
+        onSaved={() => { closeForm(); setRefreshTick(t => t + 1); }}
+        onCancelBill={isAdmin ? (c, cancelled) => { closeForm(); handleCancel(c, cancelled); } : undefined}
+      />
+
+      <EntryDetailModal
+        contact={detailContact}
+        onClose={() => setDetailContact(null)}
+        onEdit={(c) => { setDetailContact(null); openEdit(c); }}
+        onDelete={isAdmin ? (c) => { setDetailContact(null); setContactToDelete(c); } : undefined}
+        onCancel={isAdmin ? handleCancel : undefined}
+        onNotify={(msg) => setAlertConfig({ isOpen: true, message: msg, type: 'error' })}
+      />
+
       <AlertModal
         isOpen={alertConfig.isOpen}
-        title={alertConfig.type === 'error' ? 'Error' : 'Success'}
+        title={alertConfig.title || (alertConfig.type === 'error' ? 'Error' : 'Success')}
         message={alertConfig.message}
         type={alertConfig.type}
-        onClose={() => setAlertConfig({ isOpen: false, message: '', type: 'error' })}
+        onClose={() => setAlertConfig({ isOpen: false, title: '', message: '', type: 'error' })}
       />
     </>
   );

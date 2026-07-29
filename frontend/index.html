@@ -2,12 +2,53 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/chavera-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0D0D0D" />
+    <!-- Tells the browser to render its own surfaces dark — form controls,
+         scrollbars, and the canvas itself before any CSS has arrived. -->
+    <meta name="color-scheme" content="dark" />
     <title>Chavera Internal System</title>
+    <!--
+      Inline so it applies on the very first paint. The stylesheet is a
+      separate request; until it lands the browser shows its default white
+      canvas, which is the flash seen on every refresh. This runs before that.
+    -->
+    <style>
+      html, body, #root {
+        margin: 0;
+        min-height: 100%;
+        background-color: #0D0D0D;
+        color: #F5F5F4;
+      }
+      /* Shown only until React mounts and replaces the contents of #root. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0D0D0D;
+      }
+      #boot img {
+        width: 116px;
+        height: auto;
+        animation: bootpulse 1.4s ease-in-out infinite;
+      }
+      @keyframes bootpulse {
+        0%, 100% { opacity: 0.35; }
+        50%      { opacity: 0.9; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot img { animation: none; opacity: 0.7; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- React replaces #root's contents on mount, so this needs no cleanup. -->
+      <div id="boot"><img src="/chavera-logo.png" alt="Chavera" /></div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

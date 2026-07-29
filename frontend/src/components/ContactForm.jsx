@@ -1,6 +1,115 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Plus, ChevronDown } from 'lucide-react';
 import CustomSelect from './CustomSelect';
+import ConfirmEntryModal from './ConfirmEntryModal';
 import api from '../utils/api';
+import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, gradeSymbol, GRADE_LEGEND } from '../utils/contactFields';
+
+// Local YYYY-MM-DD (native date input format), never UTC-shifted.
+const todayISO = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const pad2 = (n) => String(n).padStart(2, '0');
+const daysInMonth = (y, m) => new Date(y, m, 0).getDate(); // m is 1-12
+
+// Step ONE segment of an ISO date (YYYY-MM-DD) with cascading rollover:
+//  - day:   past the month's last day rolls into the next month (and year);
+//  - month: past December rolls into January of the next year;
+//  - year:  just moves the year, clamping the day (e.g. 29 Feb → 28 Feb).
+const stepSegment = (iso, seg, delta) => {
+  const base = iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : todayISO();
+  let [y, m, d] = base.split('-').map(Number);
+
+  if (seg === 'd') {
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + delta);   // Date arithmetic cascades month + year
+    return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+  }
+  if (seg === 'm') {
+    m += delta;
+    while (m > 12) { m -= 12; y += 1; }
+    while (m < 1) { m += 12; y -= 1; }
+  } else {
+    y += delta;
+  }
+  d = Math.min(d, daysInMonth(y, m));   // keep the day valid for the new month
+  return `${y}-${pad2(m)}-${pad2(d)}`;
+};
+
+// Segmented DD / MM / YYYY field. Replaces the native date input so ↑/↓ can act
+// on the focused segment with proper rollover (native arrows don't cascade).
+function DateField({ value, onChange }) {
+  const valid = value && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const [seg, setSeg] = useState(() => {
+    if (valid) { const [y, m, d] = value.split('-'); return { d, m, y }; }
+    return { d: '', m: '', y: '' };
+  });
+  const mRef = useRef(null);
+  const yRef = useRef(null);
+
+  // Reflect external changes (arrow step, "defaults to today", edit-load).
+  useEffect(() => {
+    if (valid) { const [y, m, d] = value.split('-'); setSeg({ d, m, y }); }
+    else setSeg({ d: '', m: '', y: '' });
+  }, [value, valid]);
+
+  const emit = (next) => {
+    const { d, m, y } = next;
+    if (d && m && y && y.length === 4) {
+      const yi = +y, mi = +m, di = +d;
+      if (mi >= 1 && mi <= 12 && di >= 1) {
+        onChange(`${yi}-${pad2(mi)}-${pad2(Math.min(di, daysInMonth(yi, mi)))}`);
+      }
+    }
+  };
+
+  const onType = (key, len, nextRef) => (e) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, len);
+    const next = { ...seg, [key]: digits };
+    setSeg(next);
+    emit(next);
+    if (digits.length === len && nextRef) nextRef.current?.focus();
+  };
+
+  const onArrow = (key) => (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      onChange(stepSegment(value || todayISO(), key, e.key === 'ArrowUp' ? 1 : -1));
+    }
+  };
+
+  return (
+    <div className="date-field input-field">
+      <input className="date-seg" placeholder="DD" inputMode="numeric" maxLength={2} aria-label="Day"
+        value={seg.d} onChange={onType('d', 2, mRef)} onKeyDown={onArrow('d')} />
+      <span className="date-sep">/</span>
+      <input ref={mRef} className="date-seg" placeholder="MM" inputMode="numeric" maxLength={2} aria-label="Month"
+        value={seg.m} onChange={onType('m', 2, yRef)} onKeyDown={onArrow('m')} />
+      <span className="date-sep">/</span>
+      <input ref={yRef} className="date-seg date-seg-year" placeholder="YYYY" inputMode="numeric" maxLength={4} aria-label="Year"
+        value={seg.y} onChange={onType('y', 4, null)} onKeyDown={onArrow('y')} />
+    </div>
+  );
+}
+// Remembers the last date used, so a batch of entries for one day only needs the
+// date set once. Cleared implicitly by defaulting to today on the first entry.
+const LAST_DATE_KEY = 'chavera_last_entry_date';
+// Like the date: the last series code and entry number used carry forward, so a
+// new entry follows straight on from the previous one.
+const LAST_SERIES_CODE_KEY = 'chavera_last_series_code';
+const LAST_ENTRY_NO_KEY = 'chavera_last_entry_no';
+// A new entry's number = the previous entry's number + 1 (remembered across
+// entries). Returns null when nothing has been saved yet, so the caller can fall
+// back to the server's next number.
+const rememberedNextEntryNo = () => {
+  const last = parseInt(localStorage.getItem(LAST_ENTRY_NO_KEY), 10);
+  return Number.isInteger(last) && last > 0 ? last + 1 : null;
+};
+import useProducts from '../utils/useProducts';
+import useDebounce from '../utils/useDebounce';
+import { useAuth } from '../context/AuthContext';
 
 // ---------- validation rules ----------
 const RULES = {
@@ -18,12 +127,6 @@ const RULES = {
   phone_1: (v) => {
     if (!v) return 'Phone 1 is required.';
     if (!/^\d{10}$/.test(v)) return 'Phone 1 must be exactly 10 digits.';
-    return '';
-  },
-  phone_2: (v, all) => {
-    if (!v) return ''; // optional
-    if (!/^\d{10}$/.test(v)) return 'Phone 2 must be exactly 10 digits.';
-    if (v === all.phone_1) return 'Phone 2 must be different from Phone 1.';
     return '';
   },
   pincode: (v) => {
@@ -56,17 +159,92 @@ function validateAll(data) {
 }
 
 // ---------- component ----------
-export default function ContactForm({ contact, onCancel, onSave }) {
+export default function ContactForm({ contact, onCancel, onSave, onClose, onCancelBill }) {
+  const { products: productCatalogue, addProduct } = useProducts();
+  const { user } = useAuth();
+  const canAddProduct = (user?.role || 'admin') === 'admin';
+
+  // Inline "add a product" state, so a new product can be created without
+  // leaving the form. Creation is admin-only (the API enforces it).
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [newProductName, setNewProductName] = useState('');
+  const [addProductErr, setAddProductErr] = useState('');
+  const [addingProduct, setAddingProduct] = useState(false);
+  // Quantity editors collapse behind a toggle once more than two products are
+  // picked, so the section never grows unwieldy.
+  const [showQtys, setShowQtys] = useState(false);
+
+  // The entry number this entry has (existing) or will get (new). A new entry
+  // follows the previous one (remembered number + 1); editing keeps its own.
+  const [entryNo, setEntryNo] = useState(contact?.entry_no ?? rememberedNextEntryNo());
+  // True once the user hand-edits the entry number, so the auto next-number
+  // fetch never overwrites a deliberate manual value.
+  const entryNoTouchedRef = useRef(false);
+  useEffect(() => {
+    if (contact?.entry_no != null) { setEntryNo(contact.entry_no); return; }
+    // Already following the previous entry (remembered number + 1) — no fetch.
+    if (rememberedNextEntryNo() != null) return;
+    // Nothing remembered yet: fall back to the server's next number (max + 1).
+    let cancelled = false;
+    api.post('/contact/next-entry-no')
+      .then(res => { if (!cancelled && !entryNoTouchedRef.current && res.data.success) setEntryNo(res.data.data.entry_no); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contact]);
+
+  // Warn (before submit) when the hand-edited entry number is already used by
+  // another entry. The server enforces this too; this is just early feedback.
+  const [entryNoTaken, setEntryNoTaken] = useState(false);
+  const debouncedEntryNo = useDebounce(entryNo, 350);
+  useEffect(() => {
+    // Skip a blank/invalid number, or one that equals this entry's own saved
+    // number (editing without changing it isn't a conflict).
+    if (!Number.isInteger(debouncedEntryNo) || debouncedEntryNo <= 0 ||
+        (contact?.entry_no != null && debouncedEntryNo === contact.entry_no)) {
+      setEntryNoTaken(false);
+      return;
+    }
+    let cancelled = false;
+    api.post('/contact/check-entry-no', { entry_no: debouncedEntryNo, id: contact?._id })
+      .then(res => { if (!cancelled && res.data.success) setEntryNoTaken(!!res.data.data.taken); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [debouncedEntryNo, contact]);
+
+  // Start the keyboard flow on Series Code for a new entry (Series Code →
+  // Entry No → Honorific → …), instead of auto-opening the honorific dropdown.
+  const seriesCodeRef = useRef(null);
+  useEffect(() => {
+    if (contact) return;
+    const t = setTimeout(() => seriesCodeRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, [contact]);
+
+  const submitNewProduct = async () => {
+    setAddingProduct(true);
+    setAddProductErr('');
+    const res = await addProduct(newProductName);
+    setAddingProduct(false);
+    if (!res.ok) { setAddProductErr(res.error); return; }
+    // Auto-select the product just added, and reset the inline input.
+    if (!formData.products.includes(res.name)) {
+      setFormData(prev => ({ ...prev, products: [...prev.products, res.name] }));
+    }
+    setNewProductName('');
+    setShowAddProduct(false);
+  };
   const [formData, setFormData] = useState({
+    // Like the date: a new entry carries the last series code used; editing keeps
+    // the entry's own code.
+    series_code: contact
+      ? (contact.series_code || '')
+      : (localStorage.getItem(LAST_SERIES_CODE_KEY) || ''),
     honorific: contact?.honorific || '',
     full_name: contact?.full_name || '',
-    relation: contact?.relation || '',
     business_name: contact?.business_name || '',
-    age: contact?.age || '',
     ppr: contact?.ppr || '',
     toq: contact?.toq || '',
     instagram_id: contact?.instagram_id || '',
-    product_name: contact?.product_name || '',
     customer_occupation: contact?.customer_occupation || '',
     door_flat_no: contact?.door_flat_no || '',
     street: contact?.street || '',
@@ -77,8 +255,21 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     state: contact?.state || '',
     pincode: contact?.pincode || '',
     phone_1: contact?.phone_1 || '',
-    phone_2: contact?.phone_2 || '',
+    phones: Array.isArray(contact?.phones) && contact.phones.length
+      ? contact.phones.map(String)
+      : (contact?.phone_2 ? [String(contact.phone_2)] : []),
     category: contact?.category || '',
+    customer_grade: contact?.customer_grade || '',
+    house_type: contact?.house_type || '',
+    purchase_type: contact?.purchase_type || '',
+    products: Array.isArray(contact?.products) ? contact.products : [],
+    // Per-product quantity, keyed by product name. Absent key = quantity 1.
+    product_quantities: contact?.product_quantities ? { ...contact.product_quantities } : {},
+    // #1/#2: a new entry defaults to the last date used (or today for the very
+    // first). Editing an existing entry keeps that entry's own date.
+    contact_date: contact?.contact_date
+      ? String(contact.contact_date).slice(0, 10)
+      : (contact ? '' : (localStorage.getItem(LAST_DATE_KEY) || todayISO())),
     notes: contact?.notes || ''
   });
 
@@ -89,31 +280,29 @@ export default function ContactForm({ contact, onCancel, onSave }) {
   // Server-level error banner
   const [serverError, setServerError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false); // review step before save
 
-  // Locations
-  const [locations, setLocations] = useState([]);
+  // Locations — states + district NAMES only (cities are lazy-loaded per district
+  // so the form never ships the full 150k-city dataset).
+  const [locations, setLocations] = useState([]); // [{ state, districts: [name] }]
   const [locLoading, setLocLoading] = useState(true);
 
   useEffect(() => {
-    api.post('/location/list')
+    api.post('/location/states-districts')
       .then(res => { if (res.data.success) setLocations(res.data.data); })
       .catch(() => {})
       .finally(() => setLocLoading(false));
   }, []);
 
-  // Cascading lists
+  // Cascading lists (districts are plain name strings now)
   const availableDistricts = locations.find(l => l.state === formData.state)?.districts || [];
-  const availableCities = availableDistricts.find(d => d.name === formData.district)?.cities || [];
 
-  // Re-validate phone_2 whenever phone_1 changes (uniqueness check)
-  useEffect(() => {
-    if (touched.phone_2) {
-      setFieldErrors(prev => ({
-        ...prev,
-        phone_2: validate('phone_2', formData.phone_2, formData),
-      }));
-    }
-  }, [formData.phone_1]);
+  // True once the user has typed a business name of their own, which stops it
+  // mirroring the full name. Seeded true when editing a contact whose business
+  // name already differs, so opening an old record never rewrites it.
+  const businessTouchedRef = useRef(
+    !!(contact?.business_name && contact.business_name !== contact.full_name)
+  );
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -122,10 +311,18 @@ export default function ContactForm({ contact, onCancel, onSave }) {
       next = { ...formData, state: value, district: '', village_town: '' };
     } else if (name === 'district') {
       next = { ...formData, district: value, village_town: '' };
-    } else if (['phone_1', 'phone_2', 'pincode'].includes(name)) {
+    } else if (['phone_1', 'pincode'].includes(name)) {
       next = { ...formData, [name]: value.replace(/\D/g, '') };
+    } else if (name === 'full_name') {
+      // #9: business name follows the full name by default. Once the user
+      // types their own business name it stops mirroring, so a deliberate
+      // value is never overwritten by later edits to the name.
+      next = { ...formData, full_name: value };
+      if (!businessTouchedRef.current) next.business_name = value;
     } else {
       next = { ...formData, [name]: value };
+      // Typing in Business Name breaks the mirror for good.
+      if (name === 'business_name') businessTouchedRef.current = true;
     }
 
     setFormData(next);
@@ -148,6 +345,39 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     }));
   };
 
+  const [phonesError, setPhonesError] = useState('');
+  const [pincodeAutofilled, setPincodeAutofilled] = useState(false);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+
+  // #7: auto-fill pincode from the location. The server checks the India Post
+  // directory first, then falls back to pincodes previously entered here for
+  // the same village. Only fills when pincode is empty, so a manual value is
+  // never overwritten.
+  const lookupPincode = async () => {
+    const town = (formData.village_town || '').trim();
+    if (!town || formData.pincode) return;
+    setPincodeLoading(true);
+    try {
+      const res = await api.post('/contact/pincode-suggestion', {
+        village_town: town, district: formData.district, state: formData.state,
+      });
+      const pin = res.data?.data?.pincode;
+      if (pin) {
+        // Re-check pincode is still empty (user may have typed meanwhile).
+        setFormData(prev => (prev.pincode ? prev : { ...prev, pincode: pin }));
+        setPincodeAutofilled(true);
+      }
+    } catch { /* silent — pincode stays manual */ }
+    finally { setPincodeLoading(false); }
+  };
+  const addPhone = () => setFormData(prev => ({ ...prev, phones: [...prev.phones, ''] }));
+  const updatePhone = (idx, val) => setFormData(prev => {
+    const phones = [...prev.phones];
+    phones[idx] = val.replace(/\D/g, '').slice(0, 10);
+    return { ...prev, phones };
+  });
+  const removePhone = (idx) => setFormData(prev => ({ ...prev, phones: prev.phones.filter((_, i) => i !== idx) }));
+
   // CustomSelect doesn't fire blur events — mark as touched on change
   const handleSelectChange = (e) => {
     const { name } = e.target;
@@ -155,18 +385,52 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     setTouched(prev => ({ ...prev, [name]: true }));
   };
 
+  // Toggle a product in the multi-select list. Dropping a product also drops
+  // any quantity it carried, so stale quantities never get saved.
+  const toggleProduct = (product) => {
+    setFormData(prev => {
+      const has = prev.products.includes(product);
+      const nextQty = { ...prev.product_quantities };
+      if (has) delete nextQty[product];
+      return {
+        ...prev,
+        products: has ? prev.products.filter(p => p !== product) : [...prev.products, product],
+        product_quantities: nextQty,
+      };
+    });
+  };
+
+  // Set a product's quantity. No upper limit — the client wanted to enter very
+  // large counts. Quantity 1 (or blank) is the default, so it isn't stored.
+  const setQty = (product, raw) => {
+    const digits = String(raw).replace(/\D/g, '').slice(0, 9);
+    setFormData(prev => {
+      const next = { ...prev.product_quantities };
+      const n = parseInt(digits, 10);
+      if (!Number.isFinite(n) || n <= 1) delete next[product];
+      else next[product] = n;
+      return { ...prev, product_quantities: next };
+    });
+  };
+
   // Field status for styling
   const fieldState = (name) => {
     if (!touched[name]) return '';
     if (fieldErrors[name]) return 'error';
-    if (RULES[name]) return 'success';
+    // Only call a field "valid" once it actually holds something. Without this
+    // an empty optional field turns green the moment Save marks everything
+    // touched — and Business Name lit up green while still showing its
+    // placeholder, purely because Full Name had been mirrored into it.
+    const v = formData[name];
+    const filled = Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '';
+    if (RULES[name] && filled) return 'success';
     return '';
   };
 
   const inputStyle = (name) => {
     const s = fieldState(name);
     return {
-      borderColor: s === 'error' ? '#DC2626' : s === 'success' ? '#16A34A' : undefined,
+      borderColor: s === 'error' ? 'var(--danger)' : s === 'success' ? '#16A34A' : undefined,
       boxShadow: s === 'error'
         ? '0 0 0 2px rgba(220,38,38,0.15)'
         : s === 'success'
@@ -177,7 +441,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
 
   const FieldError = ({ name }) =>
     touched[name] && fieldErrors[name] ? (
-      <span style={{ color: '#DC2626', fontSize: '0.78rem', marginTop: 4, display: 'block' }}>
+      <span style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 4, display: 'block' }}>
         ⚠ {fieldErrors[name]}
       </span>
     ) : null;
@@ -188,7 +452,9 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     </span>
   );
 
-  const handleSubmit = async (e) => {
+  // #13 Save is a two-step commit: validate, show the user exactly what will
+  // be written, then persist only after they confirm.
+  const handleSubmit = (e) => {
     e.preventDefault();
     setServerError('');
 
@@ -200,9 +466,12 @@ export default function ContactForm({ contact, onCancel, onSave }) {
     const errors = validateAll(formData);
     setFieldErrors(errors);
 
-    if (Object.keys(errors).length > 0) {
+    // Additional numbers: each non-blank one must be 10 digits.
+    const badPhone = formData.phones.some(p => p && !/^\d{10}$/.test(p));
+    if (badPhone) { setPhonesError('Each additional number must be exactly 10 digits.'); }
+
+    if (Object.keys(errors).length > 0 || badPhone) {
       setServerError('Please fix the errors highlighted below before saving.');
-      // Scroll to first error
       setTimeout(() => {
         const el = document.querySelector('.input-error-field');
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -210,27 +479,95 @@ export default function ContactForm({ contact, onCancel, onSave }) {
       return;
     }
 
-    setLoading(true);
+    // Don't even reach the confirm step with a known-duplicate entry number.
+    if (entryNoTaken) {
+      setServerError(`Entry #${entryNo} is already used by another entry. Choose a different number.`);
+      return;
+    }
 
+    setConfirming(true);
+  };
+
+  // Runs after the user confirms in the review modal.
+  const handleConfirmedSave = async () => {
+    setLoading(true);
+    // Drop blank additional numbers; keep phone_2 populated from the first
+    // extra so existing label / export / detail code (which reads phone_2)
+    // keeps showing a second number.
+    const phones = formData.phones.map(p => p.trim()).filter(Boolean);
+    // Only keep quantities (>1) for products that are actually selected.
+    const product_quantities = {};
+    for (const p of formData.products) {
+      const q = parseInt(formData.product_quantities[p], 10);
+      if (Number.isFinite(q) && q > 1) product_quantities[p] = q;
+    }
     const payload = {
       ...formData,
       full_name: formData.full_name.trim(),
       village_town: formData.village_town.trim(),
-      business_name: formData.business_name.trim(),
+      business_name: (formData.business_name || '').trim(),
+      phones,
+      phone_2: phones[0] || '',
+      product_quantities,
     };
+    // Include the (possibly hand-edited) entry number. Only when it's a real
+    // number — a blank/failed fetch must not overwrite an existing entry's
+    // number on update, and lets a new entry fall back to auto-assignment.
+    if (Number.isInteger(entryNo) && entryNo > 0) payload.entry_no = entryNo;
 
     try {
+      let saved;
       if (contact && contact._id) {
-        await api.post('/contact/update', { id: contact._id, ...payload });
+        const res = await api.post('/contact/update', { id: contact._id, ...payload });
+        saved = res.data?.data;
       } else {
-        await api.post('/contact/insert', payload);
+        const res = await api.post('/contact/insert', payload);
+        saved = res.data?.data;
+      }
+      // Remember the date so the next new entry defaults to it (#2).
+      if (payload.contact_date) localStorage.setItem(LAST_DATE_KEY, payload.contact_date);
+      // Carry the series code + entry number forward, but only from a newly
+      // created entry — editing an old record shouldn't reset the running
+      // sequence. The next new entry then follows on (entry number + 1).
+      if (!(contact && contact._id)) {
+        localStorage.setItem(LAST_SERIES_CODE_KEY, payload.series_code || '');
+        const savedNo = saved?.entry_no ?? (Number.isInteger(entryNo) ? entryNo : null);
+        if (savedNo != null) localStorage.setItem(LAST_ENTRY_NO_KEY, String(savedNo));
       }
       onSave();
     } catch (err) {
+      // Drop back to the form so the error is visible next to the fields.
+      setConfirming(false);
       setServerError(err.response?.data?.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // #12 Keyboard-first: Enter moves to the next field instead of submitting,
+  // so a whole entry can be typed without touching the mouse. Enter only
+  // submits from the last control; Ctrl/Cmd+Enter submits from anywhere.
+  // Textareas keep Enter for newlines.
+  const handleFormKeyDown = (e) => {
+    if (e.key !== 'Enter') return;
+    const el = e.target;
+    const tag = (el.tagName || '').toLowerCase();
+
+    if ((e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSubmit(e); return; }
+    if (tag === 'textarea' || el.type === 'submit' || el.type === 'button') return;
+    // On a product checkbox, Enter toggles it (and stays put) so you can pick
+    // several by keyboard — instead of jumping to the next field.
+    if (el.type === 'checkbox') { e.preventDefault(); el.click(); return; }
+
+    const focusables = Array.from(
+      e.currentTarget.querySelectorAll('input, select, textarea, [data-kbd-focusable]')
+    ).filter(n => !n.disabled && n.tabIndex !== -1 && n.offsetParent !== null);
+
+    const i = focusables.indexOf(el);
+    if (i === -1) return;
+    e.preventDefault();
+    if (i < focusables.length - 1) focusables[i + 1].focus();
+    else handleSubmit(e);   // last field: Enter saves
   };
 
   // Character count helpers
@@ -238,24 +575,71 @@ export default function ContactForm({ contact, onCancel, onSave }) {
   const businessLeft = 150 - (formData.business_name?.length || 0);
 
   return (
-    <div className="page-container" style={{ paddingTop: '32px' }}>
-      <form onSubmit={handleSubmit} noValidate>
-        <div className="form-header-flex">
-          <h1>{contact ? 'Edit Contact' : 'Add Contact'}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Saving...' : 'Save Contact'}
+    <div className="entry-form-inner">
+      <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} noValidate>
+        <div className="form-header-flex entry-form-head">
+          <h1>{contact ? 'Edit Entry' : 'New Entry'}</h1>
+          {onClose && (
+            <button type="button" className="entry-icon-btn" onClick={onClose} title="Close">
+              <X size={20} />
             </button>
-          </div>
+          )}
         </div>
 
         {serverError && (
-          <div style={{ padding: '12px 16px', background: '#FEE2E2', color: '#DC2626', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ padding: '12px 16px', background: '#3B1A1A', color: 'var(--danger)', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: '1.1rem' }}>⚠</span>
             {serverError}
           </div>
         )}
+
+        {/* ENTRY — an optional series code and the running entry number. Both
+            carry forward from the previous entry (like the date). */}
+        <div className="form-section">
+          <div className="form-section-title">ENTRY</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Series Code <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+              <input
+                ref={seriesCodeRef}
+                name="series_code"
+                value={formData.series_code}
+                onChange={(e) => setFormData(prev => ({ ...prev, series_code: e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) }))}
+                className="input-field"
+                placeholder="e.g. A, AA, AB"
+                maxLength={3}
+                autoComplete="off"
+                style={{ textTransform: 'uppercase' }}
+              />
+              <FieldHint>Up to 3 letters.</FieldHint>
+            </div>
+
+            <div className="form-group">
+              <label>Entry No</label>
+              <input
+                name="entry_no"
+                value={entryNo ?? ''}
+                onChange={(e) => {
+                  entryNoTouchedRef.current = true;
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 9);
+                  setEntryNo(digits === '' ? null : parseInt(digits, 10));
+                }}
+                className={`input-field ${entryNoTaken ? 'input-error-field' : ''}`}
+                inputMode="numeric"
+                placeholder="—"
+                autoComplete="off"
+                style={entryNoTaken ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 2px rgba(220,38,38,0.15)' } : undefined}
+              />
+              {entryNoTaken ? (
+                <span style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 4, display: 'block' }}>
+                  ⚠ Entry #{entryNo} is already used by another entry.
+                </span>
+              ) : (
+                <FieldHint>{contact ? 'Editable — this entry’s number.' : 'Follows the previous entry — edit to override.'}</FieldHint>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* NAME */}
         <div className="form-section">
@@ -280,7 +664,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
             </div>
 
             <div className="form-group">
-              <label>Full Name <span style={{ color: '#DC2626' }}>*</span></label>
+              <label>Full Name <span style={{ color: 'var(--danger)' }}>*</span></label>
               <input
                 name="full_name"
                 value={formData.full_name}
@@ -297,22 +681,6 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               )}
             </div>
 
-            <div className="form-group">
-              <label>Relation</label>
-              <CustomSelect
-                name="relation"
-                value={formData.relation}
-                onChange={handleSelectChange}
-                options={[
-                  { label: 'None', value: '' },
-                  { label: 'S/O (Son of)', value: 'S/O' },
-                  { label: 'D/O (Daughter of)', value: 'D/O' },
-                  { label: 'W/O (Wife of)', value: 'W/O' },
-                  { label: 'H/O (Husband of)', value: 'H/O' },
-                ]}
-                placeholder="Select relation"
-              />
-            </div>
 
             <div className="form-group">
               <label>
@@ -328,25 +696,16 @@ export default function ContactForm({ contact, onCancel, onSave }) {
                 value={formData.business_name}
                 onChange={handleChange}
                 onBlur={handleBlur}
+                // #3: select all on focus. Business name mirrors the full name,
+                // so selecting it lets one Backspace clear it before typing the
+                // real business name — or Tab straight past to keep it.
+                onFocus={(e) => e.target.select()}
                 className={`input-field ${fieldState('business_name') === 'error' ? 'input-error-field' : ''}`}
                 placeholder="Enter business name"
                 maxLength={150}
                 style={inputStyle('business_name')}
               />
               <FieldError name="business_name" />
-            </div>
-
-            <div className="form-group">
-              <label>Age</label>
-              <input
-                name="age"
-                value={formData.age}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`input-field ${fieldState('age') === 'error' ? 'input-error-field' : ''}`}
-                placeholder="Enter Age"
-                style={inputStyle('age')}
-              />
             </div>
 
             <div className="form-group">
@@ -392,18 +751,6 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               />
             </div>
 
-            <div className="form-group">
-              <label>Product Name</label>
-              <input
-                name="product_name"
-                value={formData.product_name}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`input-field ${fieldState('product_name') === 'error' ? 'input-error-field' : ''}`}
-                placeholder="Enter Product Name"
-                style={inputStyle('product_name')}
-              />
-            </div>
 
             <div className="form-group">
               <label>Customer Occupation</label>
@@ -481,7 +828,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
                   onChange={handleSelectChange}
                   options={[
                     { label: 'Select District', value: '' },
-                    ...availableDistricts.map(d => ({ label: d.name, value: d.name }))
+                    ...availableDistricts.map(d => ({ label: d, value: d }))
                   ]}
                   placeholder="Select District"
                 />
@@ -496,45 +843,20 @@ export default function ContactForm({ contact, onCancel, onSave }) {
             {/* VILLAGE / TOWN */}
             <div className="form-group">
               <label>
-                Village / Town <span style={{ color: '#DC2626' }}>*</span>
+                Village / Town <span style={{ color: 'var(--danger)' }}>*</span>
               </label>
-              {locLoading ? (
-                <input className="input-field" disabled placeholder="Loading…" />
-              ) : !formData.district ? (
-                <input
-                  name="village_town"
-                  value={formData.village_town}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={`input-field ${fieldState('village_town') === 'error' ? 'input-error-field' : ''}`}
-                  placeholder="Enter village or town"
-                  style={inputStyle('village_town')}
-                />
-              ) : availableCities.length === 0 ? (
-                <input
-                  name="village_town"
-                  value={formData.village_town}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={`input-field ${fieldState('village_town') === 'error' ? 'input-error-field' : ''}`}
-                  placeholder="Type village or town"
-                  style={inputStyle('village_town')}
-                />
-              ) : (
-                <CustomSelect
-                  name="village_town"
-                  value={formData.village_town}
-                  onChange={handleSelectChange}
-                  options={[
-                    { label: 'Select Village/Town', value: '' },
-                    ...availableCities.map(c => ({ label: c, value: c }))
-                  ]}
-                  placeholder="Select Village/Town"
-                />
-              )}
-              {formData.district && availableCities.length === 0 && (
-                <FieldHint>No cities configured — type manually</FieldHint>
-              )}
+              {/* Plain text input (no dropdown) per client request — the client
+                  works in tiny villages that aren't in any list anyway. */}
+              <input
+                name="village_town"
+                value={formData.village_town}
+                onChange={handleChange}
+                onBlur={(e) => { handleBlur(e); lookupPincode(); }}
+                placeholder="Type any village / town…"
+                required
+                className={`input-field ${fieldState('village_town') === 'error' ? 'input-error-field' : ''}`}
+                style={inputStyle('village_town')}
+              />
               <FieldError name="village_town" />
             </div>
 
@@ -543,7 +865,7 @@ export default function ContactForm({ contact, onCancel, onSave }) {
               <input
                 name="pincode"
                 value={formData.pincode}
-                onChange={handleChange}
+                onChange={(e) => { handleChange(e); setPincodeAutofilled(false); }}
                 onBlur={handleBlur}
                 className={`input-field ${fieldState('pincode') === 'error' ? 'input-error-field' : ''}`}
                 placeholder="6-digit pincode"
@@ -552,9 +874,175 @@ export default function ContactForm({ contact, onCancel, onSave }) {
                 style={inputStyle('pincode')}
               />
               <FieldError name="pincode" />
-              {!fieldErrors.pincode && !formData.pincode && (
-                <FieldHint>Optional — 6 digits</FieldHint>
+              {pincodeLoading && <FieldHint>Looking up pincode…</FieldHint>}
+              {!pincodeLoading && pincodeAutofilled && formData.pincode && (
+                <FieldHint>Auto-filled from the location — edit if needed.</FieldHint>
               )}
+              {!pincodeLoading && !fieldErrors.pincode && !formData.pincode && !pincodeAutofilled && (
+                <FieldHint>Fills in automatically from the state / district / village.</FieldHint>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* CLASSIFICATION & PRODUCTS */}
+        <div className="form-section">
+          <div className="form-section-title">CLASSIFICATION &amp; PRODUCTS</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Date</label>
+              <DateField
+                value={formData.contact_date}
+                onChange={(iso) => setFormData(prev => ({ ...prev, contact_date: iso }))}
+              />
+              <FieldHint>Defaults to today. On any segment use ↑ / ↓ — day rolls into the next month, month past December bumps the year, and the year steps on its own.</FieldHint>
+            </div>
+
+            <div className="form-group">
+              <label>Type of Customer (Grade)</label>
+              <CustomSelect
+                name="customer_grade"
+                value={formData.customer_grade}
+                onChange={handleSelectChange}
+                options={[
+                  { label: 'None', value: '' },
+                  ...CUSTOMER_GRADES.map(g => ({ label: gradeSymbol(g), value: g })),
+                ]}
+                placeholder="Select grade"
+              />
+              <FieldHint>{GRADE_LEGEND}</FieldHint>
+            </div>
+
+            <div className="form-group">
+              <label>Type of House</label>
+              <CustomSelect
+                name="house_type"
+                value={formData.house_type}
+                onChange={handleSelectChange}
+                options={[
+                  { label: 'None', value: '' },
+                  ...HOUSE_TYPES.map(h => ({ label: h, value: h })),
+                ]}
+                placeholder="Own / Rented"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Type of Purchase</label>
+              <CustomSelect
+                name="purchase_type"
+                value={formData.purchase_type}
+                onChange={handleSelectChange}
+                options={[
+                  { label: 'None', value: '' },
+                  ...PURCHASE_TYPES.map(p => ({ label: p, value: p })),
+                ]}
+                placeholder="Finance / Cash"
+              />
+            </div>
+
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <label>Products <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400 }}>(select all that apply)</span></label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+                {productCatalogue.map(p => {
+                  const checked = formData.products.includes(p);
+                  return (
+                    <label
+                      key={p}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 12px', borderRadius: 999, cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        border: `1px solid ${checked ? 'var(--primary-accent)' : 'var(--border-color)'}`,
+                        background: checked ? 'var(--highlight)' : 'var(--bg-white)',
+                        color: checked ? 'var(--primary-accent)' : 'var(--text-dark)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleProduct(p)}
+                        style={{ accentColor: 'var(--primary-accent)' }}
+                      />
+                      {p}
+                    </label>
+                  );
+                })}
+
+                {/* Inline add — admins can create a product without opening
+                    Settings. Shows as a "+ Add" pill until clicked. */}
+                {canAddProduct && !showAddProduct && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddProduct(true); setAddProductErr(''); }}
+                    className="product-add-pill"
+                    title="Add a new product"
+                  >
+                    <Plus size={14} /> Add
+                  </button>
+                )}
+                {canAddProduct && showAddProduct && (
+                  <span className="product-add-inline">
+                    <input
+                      autoFocus
+                      value={newProductName}
+                      maxLength={60}
+                      placeholder="New product"
+                      onChange={(e) => setNewProductName(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Enter adds; Esc cancels. stopPropagation so the form's
+                        // Enter-advances-field handler doesn't also fire.
+                        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submitNewProduct(); }
+                        if (e.key === 'Escape') { e.preventDefault(); setShowAddProduct(false); setNewProductName(''); setAddProductErr(''); }
+                      }}
+                    />
+                    <button type="button" className="entry-icon-btn" onClick={submitNewProduct} disabled={addingProduct || !newProductName.trim()} title="Add">
+                      <Plus size={16} />
+                    </button>
+                    <button type="button" className="entry-icon-btn" onClick={() => { setShowAddProduct(false); setNewProductName(''); setAddProductErr(''); }} title="Cancel">
+                      <X size={16} />
+                    </button>
+                  </span>
+                )}
+              </div>
+              {addProductErr && (
+                <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 6 }}>{addProductErr}</div>
+              )}
+
+              {/* Quantity per selected product. Inline for 1–2 products; once
+                  more than two are chosen it collapses behind a toggle. */}
+              {formData.products.length > 0 && (() => {
+                const qtyRows = (
+                  <div className="qty-list">
+                    {formData.products.map(p => (
+                      <div className="qty-row" key={p}>
+                        <span className="qty-name" title={p}>{p}</span>
+                        <input
+                          className="qty-input"
+                          inputMode="numeric"
+                          placeholder="1"
+                          value={formData.product_quantities[p] ?? ''}
+                          onChange={(e) => setQty(p, e.target.value)}
+                          aria-label={`Quantity for ${p}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+                return (
+                  <div className="qty-editor">
+                    {formData.products.length > 2 ? (
+                      <>
+                        <button type="button" className="qty-toggle" onClick={() => setShowQtys(v => !v)} aria-expanded={showQtys}>
+                          <span>Quantities · {formData.products.length} products</span>
+                          <ChevronDown size={16} className={`chevron ${showQtys ? 'open' : ''}`} />
+                        </button>
+                        {showQtys && qtyRows}
+                      </>
+                    ) : qtyRows}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -563,65 +1051,55 @@ export default function ContactForm({ contact, onCancel, onSave }) {
         <div className="form-section">
           <div className="form-section-title">CONTACT</div>
           <div className="form-grid">
-            <div className="form-group">
-              <label>Phone 1 <span style={{ color: '#DC2626' }}>*</span></label>
-              <input
-                name="phone_1"
-                value={formData.phone_1}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`input-field ${fieldState('phone_1') === 'error' ? 'input-error-field' : ''}`}
-                placeholder="10-digit mobile number"
-                maxLength={10}
-                inputMode="numeric"
-                style={inputStyle('phone_1')}
-              />
+            {/* Phone 1 and its additional numbers are one group so the extra
+                numbers stack directly below it, not in the next column. */}
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <label>Phone Numbers <span style={{ color: 'var(--danger)' }}>*</span></label>
+              <div className={`phone-input phone-row ${fieldState('phone_1') === 'error' ? 'is-error' : ''}`}>
+                <span className="phone-prefix">+91</span>
+                <input
+                  name="phone_1"
+                  value={formData.phone_1}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  placeholder="Phone 1 — 10-digit mobile number"
+                  maxLength={10}
+                  inputMode="numeric"
+                />
+                {/* + to add another number, stacked below. */}
+                <button type="button" className="add-mini-btn" onClick={addPhone} title="Add another number" aria-label="Add another number" style={{ marginRight: 6 }}>
+                  <Plus size={15} />
+                </button>
+              </div>
               <FieldError name="phone_1" />
               {!fieldErrors.phone_1 && formData.phone_1.length > 0 && formData.phone_1.length < 10 && touched.phone_1 && (
                 <FieldHint>{10 - formData.phone_1.length} more digits needed</FieldHint>
               )}
-              {!touched.phone_1 && <FieldHint>Required — 10 digits, no spaces</FieldHint>}
-            </div>
+              {!touched.phone_1 && !formData.phone_1 && <FieldHint>Required — 10 digits. Tap + to add more numbers.</FieldHint>}
 
-            <div className="form-group">
-              <label>Phone 2 <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-              <input
-                name="phone_2"
-                value={formData.phone_2}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`input-field ${fieldState('phone_2') === 'error' ? 'input-error-field' : ''}`}
-                placeholder="Alternate number (optional)"
-                maxLength={10}
-                inputMode="numeric"
-                style={inputStyle('phone_2')}
-              />
-              <FieldError name="phone_2" />
-              {!fieldErrors.phone_2 && formData.phone_2 && formData.phone_2.length > 0 && formData.phone_2.length < 10 && touched.phone_2 && (
-                <FieldHint>{10 - formData.phone_2.length} more digits needed</FieldHint>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Category</label>
-              <CustomSelect
-                name="category"
-                value={formData.category}
-                onChange={handleSelectChange}
-                options={[
-                  { label: 'None', value: '' },
-                  { label: 'DEALER', value: 'DEALER' },
-                  { label: 'CUSTOMER', value: 'CUSTOMER' },
-                ]}
-                placeholder="Select category"
-              />
+              {formData.phones.map((num, i) => (
+                <div key={i} className="phone-input phone-row" style={{ marginTop: 8 }}>
+                  <span className="phone-prefix">+91</span>
+                  <input
+                    value={num}
+                    onChange={(e) => { updatePhone(i, e.target.value); setPhonesError(''); }}
+                    placeholder={`Phone ${i + 2} — 10-digit number`}
+                    maxLength={10}
+                    inputMode="numeric"
+                  />
+                  <button type="button" className="entry-icon-btn" onClick={() => removePhone(i)} title="Remove number">
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+              {phonesError && <div style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 6 }}>{phonesError}</div>}
             </div>
 
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label>
                 Notes
                 {formData.notes.length > 0 && (
-                  <span style={{ float: 'right', fontSize: '0.75rem', color: notesLeft < 50 ? '#DC2626' : 'var(--text-muted)', fontWeight: 400 }}>
+                  <span style={{ float: 'right', fontSize: '0.75rem', color: notesLeft < 50 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 400 }}>
                     {notesLeft} / 500 remaining
                   </span>
                 )}
@@ -640,7 +1118,35 @@ export default function ContactForm({ contact, onCancel, onSave }) {
             </div>
           </div>
         </div>
+
+        {/* Bottom action bar — so users don't scroll back up to save */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 8, marginBottom: 8 }}>
+          {/* Cancel Bill only on an existing entry, and pushed to the left. */}
+          {contact && contact._id && onCancelBill && (
+            <button
+              type="button"
+              className="btn-link"
+              style={{ marginRight: 'auto', color: contact.cancelled ? 'var(--accent-text)' : 'var(--danger)' }}
+              onClick={() => onCancelBill(contact, !contact.cancelled)}
+            >
+              {contact.cancelled ? 'Restore Bill' : 'Cancel Bill'}
+            </button>
+          )}
+          <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Saving…' : 'Save Entry'}
+          </button>
+        </div>
       </form>
+
+      <ConfirmEntryModal
+        isOpen={confirming}
+        data={formData}
+        isEdit={!!(contact && contact._id)}
+        saving={loading}
+        onConfirm={handleConfirmedSave}
+        onEdit={() => setConfirming(false)}
+      />
     </div>
   );
 }

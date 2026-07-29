@@ -1,23 +1,38 @@
 import { useState, Suspense, lazy } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { Users, Upload, Settings, LogOut, MapPin, Building2 } from 'lucide-react';
+import { Users, Settings, LogOut, LayoutDashboard, ChevronDown } from 'lucide-react';
 
 // Lazy loaded pages
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const ContactsPage = lazy(() => import('./pages/ContactsPage'));
-const ContactForm = lazy(() => import('./components/ContactForm'));
 const ImportPage = lazy(() => import('./pages/ImportPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const LocationsPage = lazy(() => import('./pages/LocationsPage'));
 const CitiesPage = lazy(() => import('./pages/CitiesPage'));
 
+// Gate for admin-only pages. Staff are redirected to the Entry list rather than
+// shown a page whose actions they can't perform. This is a UX guard, not the
+// security boundary — the backend requireRole middleware is that.
+function RequireAdmin({ isAdmin, children }) {
+  return isAdmin ? children : <Navigate to="/" replace />;
+}
+
 function App() {
   const { isAuthenticated, user, login, logout } = useAuth();
-  const [editingContact, setEditingContact] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Tokens issued before roles existed carry no role; treat those as admin so
+  // the upgrade never locks the existing owner out of their own tools.
+  const role = user?.role || 'admin';
+  const isAdmin = role === 'admin';
+  // Friendly role label for display. The system has two roles; admins get the
+  // "Super Admin" title since it's the top level of access.
+  const roleLabel = isAdmin ? 'Super Admin' : 'Staff';
 
   const handleLogin = (token, userData) => {
     login(token, userData);
@@ -35,55 +50,71 @@ function App() {
     </Suspense>
   );
 
+  // Settings lives only in the header user dropdown now, not the nav. Import is
+  // reached from the Entry toolbar. The Dashboard (analytics, DB usage) is an
+  // admin tool, so staff only get the Entry screen in the nav.
   const navItems = [
-    { path: '/',         icon: <Users size={18} />,   label: 'Directory'  },
-    { path: '/import',   icon: <Upload size={18} />,   label: 'Import'     },
-    { path: '/locations',icon: <MapPin size={18} />,   label: 'States & Districts' },
-    { path: '/cities',   icon: <Building2 size={18} />,label: 'Cities'     },
-    { path: '/settings', icon: <Settings size={18} />, label: 'Settings'   },
+    ...(isAdmin ? [{ path: '/dashboard', icon: <LayoutDashboard size={17} />, label: 'Dashboard' }] : []),
+    { path: '/', icon: <Users size={17} />, label: 'Entry' },
   ];
 
   const isActive = (path) => {
-    if (path === '/') return location.pathname === '/' || location.pathname === '/form';
+    if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
   return (
-    <div className="app-layout">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <h2>Contact Directory</h2>
-          <p>Enterprise Management</p>
-        </div>
+    <div className="app-shell">
+      {/* Top navigation bar (replaces the former left sidebar) */}
+      <header className="navbar">
+        <div className="navbar-user">
+          <button type="button" className="navbar-user-btn" onClick={() => setMenuOpen(o => !o)} aria-expanded={menuOpen}>
+            <span className="navbar-avatar">{(user?.name || '?').charAt(0).toUpperCase()}</span>
+            <span className="navbar-user-meta">
+              <span className="navbar-user-name">{user?.name}</span>
+              <span className="navbar-user-role">{roleLabel}</span>
+            </span>
+            <ChevronDown size={14} />
+          </button>
 
-        <nav className="sidebar-nav" style={{ flex: 1 }}>
+          {menuOpen && (
+            <>
+              {/* Click-catcher so the menu closes on any outside click. */}
+              <div className="navbar-menu-scrim" onClick={() => setMenuOpen(false)} />
+              <div className="navbar-menu">
+                <div className="navbar-menu-head">
+                  <div className="navbar-user-name">{user?.name}</div>
+                  <div className="navbar-user-email">{user?.email}</div>
+                  <span className={`role-badge ${isAdmin ? 'is-admin' : ''}`}>{roleLabel}</span>
+                </div>
+                <button type="button" className="navbar-menu-item" onClick={() => { setMenuOpen(false); navigate('/settings'); }}>
+                  <Settings size={15} /> Settings
+                </button>
+                <button type="button" className="navbar-menu-item is-danger" onClick={() => { setMenuOpen(false); handleLogout(); }}>
+                  <LogOut size={15} /> Logout
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+        <nav className="navbar-nav">
           {navItems.map(item => (
-            <div
+            <button
               key={item.path}
+              type="button"
               className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
-              onClick={() => {
-                if (item.path === '/') setEditingContact(null);
-                navigate(item.path);
-              }}
+              onClick={() => navigate(item.path)}
             >
-              {item.icon} {item.label}
-            </div>
+              {item.icon} <span>{item.label}</span>
+            </button>
           ))}
         </nav>
 
-        <div className="sidebar-nav" style={{ borderTop: '1px solid var(--border-color)' }}>
-          {user && (
-            <div style={{ padding: '8px 16px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              <div style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{user.name}</div>
-              <div>{user.email}</div>
-            </div>
-          )}
-          <div className="nav-item" onClick={handleLogout} style={{ color: 'var(--danger, #DC2626)' }}>
-            <LogOut size={18} /> Logout
-          </div>
+        <div className="navbar-brand" onClick={() => navigate(isAdmin ? '/dashboard' : '/')} title="Chavera">
+          <img src="/chavera-logo.png" alt="Chavera" className="navbar-logo" />
         </div>
-      </aside>
+
+      </header>
 
       {/* Main Content */}
       <main className="main-content">
@@ -93,25 +124,34 @@ function App() {
           <div className="shimmer-block" style={{ width: '100%', height: '400px', borderRadius: '8px' }}></div>
         </div>}>
           <Routes>
-            <Route path="/" element={
-              <ContactsPage
-                onAdd={() => { setEditingContact(null); navigate('/form'); }}
-                onEdit={(contact) => { setEditingContact(contact); navigate('/form'); }}
-              />
+            {/* The entry form is now a modal hosted inside ContactsPage — no
+                separate /form route to navigate to. */}
+            <Route path="/" element={<ContactsPage />} />
+            {/* Dashboard is admin-only — staff typing the URL bounce to Entry. */}
+            <Route path="/dashboard" element={
+              <RequireAdmin isAdmin={isAdmin}><DashboardPage /></RequireAdmin>
             } />
-            <Route path="/form" element={
-              <ContactForm
-                contact={editingContact}
-                onCancel={() => navigate('/')}
-                onSave={() => navigate('/')}
-              />
-            } />
-            <Route path="/import" element={
-              <ImportPage onComplete={() => navigate('/')} />
-            } />
-            <Route path="/locations" element={<LocationsPage />} />
-            <Route path="/cities" element={<CitiesPage />} />
+            {/* Settings is open to staff — it self-gates the admin-only tabs and
+                staff still need it to change their own password. */}
             <Route path="/settings" element={<SettingsPage />} />
+
+            {/* Admin-only pages. The backend already 403s the privileged actions;
+                this stops a staff user reaching the page at all (e.g. by typing
+                the URL) and bounces them to the Entry list. */}
+            <Route path="/import" element={
+              <RequireAdmin isAdmin={isAdmin}>
+                <ImportPage onComplete={() => navigate('/')} />
+              </RequireAdmin>
+            } />
+            <Route path="/locations" element={
+              <RequireAdmin isAdmin={isAdmin}><LocationsPage /></RequireAdmin>
+            } />
+            <Route path="/cities" element={
+              <RequireAdmin isAdmin={isAdmin}><CitiesPage /></RequireAdmin>
+            } />
+
+            {/* Unknown path → Entry list, so a stale bookmark never dead-ends. */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>

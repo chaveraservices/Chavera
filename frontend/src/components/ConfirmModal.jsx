@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 
-export default function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Delete', confirmColor = '#DC2626' }) {
+export default function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Delete', confirmColor = 'var(--danger)' }) {
   if (!isOpen) return null;
   return (
     <div className="modal-overlay" onClick={onCancel}>

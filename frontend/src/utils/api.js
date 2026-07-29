@@ -14,12 +14,15 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// Auto-logout when the token is missing/expired or access is denied.
+// Auto-logout only when the token itself is missing/expired (401). A 403 means
+// the token is valid but the action isn't allowed for this role (e.g. staff
+// hitting an admin endpoint) — that must NOT end the session, or a staff user
+// would be logged out just for opening a page with an admin-only widget.
 api.interceptors.response.use(
   response => response,
   error => {
     const status = error.response?.status;
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       // Avoid wiping session for failed login/register attempts.
       const url = error.config?.url || '';
       const isAuthRoute = url.includes('/login') || url.includes('/register');

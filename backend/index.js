@@ -12,12 +12,16 @@ import router from './router.js';
 import connectDB from './db.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
+import { initKeepAlive } from './utils/keepAlive.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Connect to MongoDB
 connectDB();
+
+// Initialize 14-min keep-alive ping
+initKeepAlive();
 
 // Security & logging middleware
 app.use(helmet());
@@ -30,6 +34,11 @@ app.use('/api', apiLimiter);
 
 // API Routes
 app.use('/api', router);
+
+// Health check route for Render
+app.get('/', (req, res) => {
+    res.status(200).send('Chavera API is running!');
+});
 
 // 404 + central error handler (must be last)
 app.use(notFound);
