@@ -1,8 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, BarChart3, Hash, Calendar, Search } from 'lucide-react';
 import api from '../utils/api';
-import { seriesRange } from '../utils/series';
 import SeriesAreaChart from './SeriesAreaChart';
 import EntryDetailModal from './EntryDetailModal';
 import CustomSelect from './CustomSelect';
@@ -73,10 +72,9 @@ export default function ReportModal({ open, onClose }) {
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
-  const [seriesNo, setSeriesNo] = useState('');
-  const [rangeFrom, setRangeFrom] = useState('');    // custom entry-range low
-  const [rangeTo, setRangeTo] = useState('');        // custom entry-range high
-  const [seriesData, setSeriesData] = useState(null); // { from, to, count, items }
+  // By-Year view: pick a calendar year to inspect its entries (numbered 1..N).
+  const [selectedYear, setSelectedYear] = useState(null);
+  const [seriesData, setSeriesData] = useState(null); // { year, count, items }
   const [seriesLoading, setSeriesLoading] = useState(false);
   const [seriesError, setSeriesError] = useState('');
   const [listSearch, setListSearch] = useState('');   // filter within the entries list
@@ -94,7 +92,7 @@ export default function ReportModal({ open, onClose }) {
 
   // Reset transient state on close.
   useEffect(() => {
-    if (!open) { setView('date'); setPreset('all'); setProduct(''); setCustom({ from: '', to: '' }); setSeriesNo(''); setRangeFrom(''); setRangeTo(''); setSeriesData(null); setListSearch(''); setOpenContact(null); }
+    if (!open) { setView('date'); setPreset('all'); setProduct(''); setCustom({ from: '', to: '' }); setSelectedYear(null); setSeriesData(null); setListSearch(''); setOpenContact(null); }
   }, [open]);
 
   // Fetch period analytics whenever the date range changes (By-Date view).
@@ -118,45 +116,29 @@ export default function ReportModal({ open, onClose }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose, openContact]);
 
-  // The entry-number window to inspect: a custom From–To range wins; otherwise
-  // the single series number maps to its 100-entry block.
-  const activeRange = useMemo(() => {
-    const f = parseInt(rangeFrom, 10);
-    const t = parseInt(rangeTo, 10);
-    if (Number.isInteger(f) && Number.isInteger(t)) {
-      return { from: Math.min(f, t), to: Math.max(f, t) };
-    }
-    const s = parseInt(seriesNo, 10);
-    return Number.isInteger(s) && s >= 1 ? seriesRange(s) : null;
-  }, [rangeFrom, rangeTo, seriesNo]);
-
-  // Fetch entries for the active window whenever it changes. Debounced so typing
-  // a number doesn't fire (and flicker the modal) on every keystroke; the old
-  // list stays visible (dimmed) while the new one loads, so height never jumps.
+  // Load the selected year's entries (in date order, 1..N). The previous list
+  // stays visible (dimmed) while the new one loads, so height never jumps.
   useEffect(() => {
-    if (!open || view !== 'series' || !activeRange) { setSeriesData(null); setSeriesError(''); return; }
+    if (!open || view !== 'series' || selectedYear == null) { setSeriesData(null); setSeriesError(''); return; }
     setSeriesLoading(true);
     setSeriesError('');
     setListSearch('');
-    const t = setTimeout(() => {
-      api.post('/contact/entries-range', { from: activeRange.from, to: activeRange.to, product })
-        .then(res => { if (res.data.success) { setSeriesData(res.data.data); setSeriesError(''); } })
-        .catch((err) => {
-          setSeriesError(
-            err.response?.status === 404
-              ? 'This report needs the updated server. Restart the backend, then try again.'
-              : (err.response?.data?.message || 'Could not load entries for this range.')
-          );
-        })
-        .finally(() => setSeriesLoading(false));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [open, view, activeRange, product]);
+    api.post('/contact/series-entries', { year: selectedYear })
+      .then(res => { if (res.data.success) { setSeriesData(res.data.data); setSeriesError(''); } })
+      .catch((err) => {
+        setSeriesError(
+          err.response?.status === 404
+            ? 'This report needs the updated server. Restart the backend, then try again.'
+            : (err.response?.data?.message || 'Could not load entries for this year.')
+        );
+      })
+      .finally(() => setSeriesLoading(false));
+  }, [open, view, selectedYear, product]);
 
   if (!open) return null;
 
-  const highlight = (!rangeFrom && !rangeTo && seriesNo) ? parseInt(seriesNo, 10) : null;
-  const hasSelection = !!activeRange;
+  const years = report?.series || [];   // [{ year, count, active, cancelled }]
+  const hasSelection = selectedYear != null;
 
   return createPortal(
     <div className="modal-overlay" style={{ zIndex: 500 }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -168,7 +150,7 @@ export default function ReportModal({ open, onClose }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="entry-modal-name">Summary Report</div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 3 }}>
-              {view === 'date' ? 'By date range' : 'Inspect a series (100-entry batch)'}
+              {view === 'date' ? 'By date range' : 'Browse a year’s entries'}
             </div>
           </div>
           <button type="button" className="entry-icon-btn" onClick={onClose} title="Close (Esc)"><X size={18} /></button>
@@ -180,7 +162,7 @@ export default function ReportModal({ open, onClose }) {
             <Calendar size={14} /> By Date
           </button>
           <button type="button" className={`report-tab ${view === 'series' ? 'active' : ''}`} onClick={() => setView('series')}>
-            <Hash size={14} /> By Series
+            <Hash size={14} /> By Year
           </button>
 
           {/* Product filter — scopes both the cards and the series graph. */}
@@ -220,8 +202,8 @@ export default function ReportModal({ open, onClose }) {
               </div>
 
               <div className="report-graph">
-                <div className="report-graph-title">Entries per series · {product || 'all products'}</div>
-                <SeriesAreaChart data={report?.series} onPick={(s) => { setView('series'); setSeriesNo(String(s)); loadSeries(s); }} />
+                <div className="report-graph-title">Entries per year · {product || 'all products'}</div>
+                <SeriesAreaChart data={report?.series} onPick={(y) => { setView('series'); setSelectedYear(y); }} />
               </div>
             </>
           ) : loading && !report ? (
@@ -229,44 +211,22 @@ export default function ReportModal({ open, onClose }) {
           ) : (
             <>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: 12 }}>
-                Type a series number for its 100-entry batch (e.g. “2” = 101–200), or set a custom From–To entry range.
+                Pick a year to see its entries, numbered 1&hairsp;…&hairsp;N by date. The number resets each year.
               </p>
-              <div className="report-series-row">
-                <div className="report-series-input">
-                  <label>SERIES NO.</label>
-                  <input
-                    inputMode="numeric"
-                    autoFocus
-                    placeholder="e.g. 2"
-                    value={seriesNo}
-                    onChange={(e) => { setSeriesNo(e.target.value.replace(/\D/g, '').slice(0, 6)); setRangeFrom(''); setRangeTo(''); }}
-                  />
-                </div>
-
-                <div className="report-range-sep">or</div>
-
-                <div className="report-series-input">
-                  <label>FROM ENTRY</label>
-                  <input inputMode="numeric" placeholder="e.g. 150"
-                    value={rangeFrom}
-                    onChange={(e) => { setRangeFrom(e.target.value.replace(/\D/g, '').slice(0, 7)); setSeriesNo(''); }} />
-                </div>
-                <div className="report-series-input">
-                  <label>TO ENTRY</label>
-                  <input inputMode="numeric" placeholder="e.g. 380"
-                    value={rangeTo}
-                    onChange={(e) => { setRangeTo(e.target.value.replace(/\D/g, '').slice(0, 7)); setSeriesNo(''); }} />
-                </div>
-
-                {activeRange && (
-                  <div className="report-serial-range">
-                    <span className="report-serial-range-label">ENTRY RANGE</span>
-                    <span className="report-serial-range-val">{fmtNum(activeRange.from)} – {fmtNum(activeRange.to)}</span>
-                  </div>
-                )}
-                {(seriesNo || rangeFrom || rangeTo) && (
-                  <button type="button" className="btn" style={{ border: '1px solid var(--border-color)', background: 'var(--bg-white)', color: 'var(--text-dark)' }}
-                    onClick={() => { setSeriesNo(''); setRangeFrom(''); setRangeTo(''); setSeriesData(null); }}>
+              <div className="report-presets">
+                {years.length === 0 ? (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No entries yet.</span>
+                ) : years.map(y => (
+                  <button key={y.year} type="button"
+                    title={`Year ${y.year}`}
+                    className={`report-preset ${selectedYear === y.year ? 'active' : ''}`}
+                    onClick={() => setSelectedYear(selectedYear === y.year ? null : y.year)}>
+                    {y.letter || y.year} · {fmtNum(y.count)}
+                  </button>
+                ))}
+                {hasSelection && (
+                  <button type="button" className="report-preset"
+                    onClick={() => { setSelectedYear(null); setSeriesData(null); }}>
                     Clear
                   </button>
                 )}
@@ -274,36 +234,37 @@ export default function ReportModal({ open, onClose }) {
 
               {!hasSelection ? (
                 <div className="report-graph" style={{ marginTop: 14 }}>
-                  <div className="report-graph-title">Entries per series · {product || 'all products'}</div>
-                  <SeriesAreaChart data={report?.series} highlight={highlight}
-                    onPick={(s) => { setSeriesNo(String(s)); setRangeFrom(''); setRangeTo(''); }} />
+                  <div className="report-graph-title">Entries per year · {product || 'all products'}</div>
+                  <SeriesAreaChart data={report?.series} highlight={selectedYear}
+                    onPick={(y) => setSelectedYear(y)} />
                 </div>
               ) : seriesError ? (
                 <div style={{ padding: '10px 14px', margin: '14px 0', background: '#3B1A1A', color: 'var(--danger)', borderRadius: 8, fontSize: '0.85rem' }}>
                   {seriesError}
                 </div>
               ) : seriesData ? (() => {
-                // Filter within the loaded range (name / entry no / phone / business).
+                // Filter within the year (code / name / phone / business).
                 const q = listSearch.trim().toLowerCase();
+                const codeOf = (it) => it.entry_code || '';
                 const filtered = q
                   ? seriesData.items.filter(it =>
-                    String(it.entry_no).includes(q) ||
+                    codeOf(it).toLowerCase().includes(q) ||
                     (it.full_name || '').toLowerCase().includes(q) ||
                     (it.phone_1 || '').includes(q) ||
                     (it.business_name || '').toLowerCase().includes(q))
                   : seriesData.items;
                 return (
-                  // Dim (not remove) while a new range loads, so the height holds.
+                  // Dim (not remove) while a new year loads, so the height holds.
                   <div style={{ opacity: seriesLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
                     <div className="report-cards" style={{ marginTop: 4 }}>
-                      <Card label="Total Entries" value={fmtNum(seriesData.count)} sub={`#${fmtNum(seriesData.from)}–${fmtNum(seriesData.to)}`} />
+                      <Card label="Total Entries" value={fmtNum(seriesData.count)} sub={`${seriesData.letter ? `series ${seriesData.letter} · ` : ''}${seriesData.year}`} />
                       <Card label="Active" value={fmtNum(seriesData.items.filter(i => !i.cancelled).length)} tone="green" />
                       <Card label="Cancelled" value={fmtNum(seriesData.items.filter(i => i.cancelled).length)} tone="amber" />
                     </div>
 
                     <div className="report-list-head">
                       All Entries <span className="report-count">{seriesData.count}</span>
-                      <span className="report-newest">newest first</span>
+                      <span className="report-newest">in date order</span>
                     </div>
 
                     {seriesData.items.length > 0 && (
@@ -316,12 +277,12 @@ export default function ReportModal({ open, onClose }) {
 
                     <div className="report-list">
                       {seriesData.items.length === 0 ? (
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px 0' }}>No entries in this range yet.</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px 0' }}>No entries in this year yet.</div>
                       ) : filtered.length === 0 ? (
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px 0' }}>No matches for “{listSearch}”.</div>
                       ) : filtered.map(it => (
                         <button type="button" key={it._id} className={`report-list-row is-click ${it.cancelled ? 'is-cancelled' : ''}`} onClick={() => setOpenContact(it)}>
-                          <span className="report-list-no">#{it.entry_no}</span>
+                          <span className="report-list-no">{codeOf(it)}</span>
                           <span className="report-list-name">{it.honorific ? `${it.honorific} ` : ''}{it.full_name}</span>
                           <span className="report-list-date">{fmtDate(it.contact_date || it.createdAt)}</span>
                         </button>
@@ -332,7 +293,7 @@ export default function ReportModal({ open, onClose }) {
               })() : seriesLoading ? (
                 <div style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Loading entries…</div>
               ) : (
-                <div style={{ color: 'var(--text-muted)', padding: '20px 0' }}>No entries found for this range.</div>
+                <div style={{ color: 'var(--text-muted)', padding: '20px 0' }}>No entries found for this year.</div>
               )}
             </>
           )}

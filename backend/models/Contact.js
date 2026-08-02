@@ -1,10 +1,15 @@
 import mongoose from 'mongoose';
 
 const contactSchema = new mongoose.Schema({
-    // Human-facing entry number (#1, #2, …). Mongo's _id is unique but is a
-    // 24-char hex string nobody can read out over the phone; this is the ID
-    // staff actually refer to. Assigned in ContactController.insert.
+    // Human-facing entry number, RESET EACH CALENDAR YEAR. It is the entry's
+    // rank within its year, ordered by date (then Full Name, then _id). Combined
+    // with entry_year it forms the code shown to staff, e.g. "2026-1". Not a
+    // fixed id: it is recomputed whenever entries in the year change (add /
+    // date-edit / delete). See ContactController.renumberYear.
     entry_no: { type: Number, default: null, index: true },
+    // Calendar year of the entry's effective date (contact_date, or createdAt
+    // when no date was entered). Partitions the yearly numbering above.
+    entry_year: { type: Number, default: null, index: true },
     // Optional manual series code — up to 3 letters (e.g. A, AA, AB). This is a
     // human label the operator assigns; the numeric series is derived from
     // entry_no separately on the client.
@@ -56,6 +61,8 @@ const contactSchema = new mongoose.Schema({
 });
 
 // Indexes to support filtering and sorting at scale.
+// Yearly numbering: fast lookup + ordering of a year's entries.
+contactSchema.index({ entry_year: 1, entry_no: 1 });
 contactSchema.index({ full_name: 1 });
 contactSchema.index({ state: 1, district: 1, village_town: 1 });
 contactSchema.index({ category: 1 });

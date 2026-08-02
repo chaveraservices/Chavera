@@ -82,9 +82,9 @@ export default function SeriesAreaChart({ data, highlight, onPick }) {
             fill={on ? '#F2762F' : '#E25C24'} stroke="var(--bg-white)" strokeWidth={on ? 2 : 0} />;
         })}
 
-        {/* X labels (series numbers) */}
+        {/* X labels (year letters) */}
         {pts.map((d, i) => (i % labelStep === 0 || i === pts.length - 1) ? (
-          <text key={i} x={x(i)} y={H - 10} textAnchor="middle" fontSize="11" fill="var(--text-muted)">{d.series}</text>
+          <text key={i} x={x(i)} y={H - 10} textAnchor="middle" fontSize="11" fill="var(--text-muted)">{d.letter || d.series}</text>
         ) : null)}
 
         {/* Hover crosshair */}
@@ -94,8 +94,7 @@ export default function SeriesAreaChart({ data, highlight, onPick }) {
       {/* Tooltip */}
       {hv && (
         <div className="series-tip" style={{ left: `${(x(hover) / W) * 100}%` }}>
-          <div className="series-tip-title">Series {hv.series}</div>
-          <div className="series-tip-sub">Entries {hv.from}–{hv.to}</div>
+          <div className="series-tip-title">{hv.letter ? `Series ${hv.letter} · ${hv.series}` : `Year ${hv.series}`}</div>
           <div className="series-tip-val">{hv.count} {hv.count === 1 ? 'entry' : 'entries'}</div>
         </div>
       )}
