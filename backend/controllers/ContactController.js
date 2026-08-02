@@ -68,17 +68,90 @@ const lookupIndiaPost = async (town, district, state) => {
 // every range would make the dashboard look empty rather than honest.
 const EFFECTIVE_DATE = { $ifNull: ['$contact_date', '$createdAt'] };
 
-// Next human-facing entry number. Reads the current max rather than keeping a
-// counter document, so it stays correct after imports, restores, and deletions.
-// This is a single-writer office app; if it ever becomes concurrent, move to a
-// findOneAndUpdate counter — a race here would hand two entries the same number.
-const nextEntryNo = async () => {
-    const top = await Contact.findOne({ entry_no: { $ne: null } })
-        .sort({ entry_no: -1 })
-        .select('entry_no')
-        .lean();
-    return (top?.entry_no || 0) + 1;
+// ── Yearly, date-based numbering ────────────────────────────────────────────
+// An entry's number is its rank within its calendar year, ordered by date (the
+// Date field, or createdAt when none was entered), then Full Name, then _id.
+// The number RESETS to 1 each new year and is recomputed whenever the entries in
+// a year change (add / date-edit / delete). entry_year partitions it; the code
+// shown to staff is `${entry_year}-${entry_no}`, e.g. "2026-1".
+
+// Effective date used for ordering (matches the EFFECTIVE_DATE aggregation expr).
+const effDateOf = (c) => c.contact_date || c.createdAt || null;
+const yearOfDate = (d) => (d ? new Date(d).getUTCFullYear() : null);
+
+// Deterministic order within a year: date → Full Name (case-insensitive) → _id.
+const compareEntries = (a, b) => {
+    const da = +new Date(effDateOf(a)), db = +new Date(effDateOf(b));
+    if (da !== db) return da - db;
+    const na = (a.full_name || '').toLowerCase(), nb = (b.full_name || '').toLowerCase();
+    if (na < nb) return -1;
+    if (na > nb) return 1;
+    return String(a._id) < String(b._id) ? -1 : 1;
 };
+
+// Recompute entry_no (1..N) + entry_year for every entry whose effective date
+// falls in `year`. Idempotent — only writes rows whose number actually changed.
+// Single-writer office app, so a simple read-sort-write is safe here.
+const renumberYear = async (year) => {
+    if (year == null || Number.isNaN(year)) return;
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year + 1, 0, 1));
+    const docs = await Contact.find({
+        $or: [
+            { contact_date: { $gte: start, $lt: end } },
+            { contact_date: null, createdAt: { $gte: start, $lt: end } },
+        ],
+    }).select('_id contact_date createdAt full_name entry_no entry_year').lean();
+
+    docs.sort(compareEntries);
+
+    const ops = [];
+    docs.forEach((d, i) => {
+        const seq = i + 1;
+        if (d.entry_no !== seq || d.entry_year !== year) {
+            ops.push({ updateOne: { filter: { _id: d._id }, update: { $set: { entry_no: seq, entry_year: year } } } });
+        }
+    });
+    if (ops.length) await Contact.bulkWrite(ops, { ordered: false });
+};
+
+// ── Year → letter series ────────────────────────────────────────────────────
+// The year is shown as a spreadsheet-style letter: the EARLIEST year that has
+// entries is "A", the next calendar year "B", and so on (A…Z, then AA, AB…).
+// The full code shown to staff is `${letter}-${entry_no}`, e.g. "A-1". The
+// anchor is dynamic — if a still-earlier year is later added, letters shift.
+
+// 0 → A, 25 → Z, 26 → AA, 27 → AB … (Excel column style).
+const indexToLetters = (i) => {
+    let n = i, s = '';
+    do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0);
+    return s;
+};
+
+// The earliest numbered year — the "A" anchor. Null when there are no entries.
+const getMinYear = async () => {
+    const doc = await Contact.findOne({ entry_year: { $ne: null } })
+        .sort({ entry_year: 1 }).select('entry_year').lean();
+    return doc ? doc.entry_year : null;
+};
+
+// Letter for a year relative to the anchor. Clamps at A for anything <= anchor.
+const yearLetter = (year, minYear) =>
+    (year == null || minYear == null) ? null : indexToLetters(Math.max(0, year - minYear));
+
+// "A1" style code for a contact, given the anchor year.
+const codeFor = (c, minYear) =>
+    (c && c.entry_year != null && c.entry_no != null && yearLetter(c.entry_year, minYear))
+        ? `${yearLetter(c.entry_year, minYear)}${c.entry_no}` : null;
+
+// Attach entry_code to contact doc(s), returning plain objects for the response.
+const withCode = (item, minYear) => {
+    if (!item) return item;
+    const obj = typeof item.toObject === 'function' ? item.toObject() : item;
+    obj.entry_code = codeFor(obj, minYear);
+    return obj;
+};
+const withCodes = (items, minYear) => items.map(it => withCode(it, minYear));
 
 // Builds the $expr for a [from, to] window. Dates arrive as 'YYYY-MM-DD' and are
 // interpreted in server-local time, inclusive of the whole `to` day. Returns
@@ -103,7 +176,7 @@ export default class ContactController {
     // Paginated + filtered list.
     // Body: { page, pageSize, search, state, district, city, category, all }
     async getAll(req, res, next) {
-        const { search, state, district, city, category, relation, customer_grade, house_type, purchase_type, product, all, years_ago } = req.body || {};
+        const { search, state, district, city, category, relation, customer_grade, house_type, purchase_type, product, all, years_ago, year } = req.body || {};
 
         const query = {};
 
@@ -127,6 +200,7 @@ export default class ContactController {
         if (house_type) query.house_type = String(house_type);
         if (purchase_type) query.purchase_type = String(purchase_type);
         if (product) query.products = String(product); // array field: matches contacts whose products include this
+        if (year) { const y = parseInt(year, 10); if (Number.isInteger(y)) query.entry_year = y; }  // yearly series filter
 
         if (search && typeof search === 'string' && search.trim()) {
             const re = new RegExp(escapeRegex(search.trim()), 'i');
@@ -145,7 +219,7 @@ export default class ContactController {
         // `all: true` (used by export) returns the full matching set without paging.
         if (all) {
             const items = await Contact.find(query).collation({ locale: 'en' }).sort({ full_name: 1 });
-            res.locals.data = { items, total, page: 1, pageSize: total };
+            res.locals.data = { items: withCodes(items, await getMinYear()), total, page: 1, pageSize: total };
             res.locals.message = 'Contacts fetched successfully';
             return next();
         }
@@ -159,7 +233,7 @@ export default class ContactController {
             .skip((page - 1) * pageSize)
             .limit(pageSize);
 
-        res.locals.data = { items, total, page, pageSize };
+        res.locals.data = { items: withCodes(items, await getMinYear()), total, page, pageSize };
         res.locals.message = 'Contacts fetched successfully';
         next();
     }
@@ -180,6 +254,12 @@ export default class ContactController {
             Contact.distinct('products', { products: { $nin: [null, ''] } }),
         ]);
 
+        // Years present, newest first, each with its series letter (A, B, …).
+        const yearsRaw = (await Contact.distinct('entry_year', { entry_year: { $ne: null } }))
+            .filter(y => Number.isInteger(y));
+        const minY = yearsRaw.length ? Math.min(...yearsRaw) : null;
+        const years = yearsRaw.sort((a, b) => b - a).map(y => ({ year: y, letter: yearLetter(y, minY) }));
+
         const sorted = (a) => a.filter(Boolean).sort((x, y) => x.localeCompare(y));
         res.locals.data = {
             tuples,
@@ -189,6 +269,7 @@ export default class ContactController {
             houseTypes: sorted(houseTypes),
             purchaseTypes: sorted(purchaseTypes),
             products: sorted(products),
+            years,
         };
         res.locals.message = 'Filter options fetched successfully';
         next();
@@ -297,7 +378,7 @@ export default class ContactController {
         const contact = await Contact.findById(id);
         if (!contact) throw new ApiError(404, 'Contact not found');
 
-        res.locals.data = contact;
+        res.locals.data = withCode(contact, await getMinYear());
         res.locals.message = 'Contact fetched successfully';
         next();
     }
@@ -333,7 +414,8 @@ export default class ContactController {
         const creator = req.user?.id ? await User.findById(req.user.id).select('name').lean() : null;
 
         const newContact = new Contact({
-            entry_no: await nextEntryNo(),
+            // entry_no / entry_year are assigned by renumberYear below, from the
+            // entry's date — not a running counter.
             series_code: cleanSeriesCode(series_code),
             honorific, full_name, relation, business_name, age, ppr, toq, instagram_id, product_name, customer_occupation, door_flat_no, street, landmark,
             village_town, mandal, district, state, pincode, phone_1, phone_2: secondPhone, phones: cleanPhones, category,
@@ -347,8 +429,10 @@ export default class ContactController {
         });
 
         await newContact.save();
+        // Number this entry (and re-rank the rest of its year by date).
+        await renumberYear(yearOfDate(newContact.contact_date || newContact.createdAt));
 
-        res.locals.data = newContact;
+        res.locals.data = withCode(await Contact.findById(newContact._id), await getMinYear());
         res.locals.message = 'Contact inserted successfully';
         next();
     }
@@ -377,18 +461,22 @@ export default class ContactController {
             throw new ApiError(400, 'No valid contacts found: verify required fields and 10-digit phone format');
         }
 
-        // Number the batch from the current high-water mark so imported rows
-        // get readable entry numbers too, contiguous with what's already there.
-        let seq = await nextEntryNo();
         const importer = req.user?.id ? await User.findById(req.user.id).select('name').lean() : null;
         for (const c of valid) {
-            c.entry_no = seq++;
+            // entry_no / entry_year are assigned by renumberYear below, from each
+            // row's date — never carried over from the import file.
+            delete c.entry_no;
+            delete c.entry_year;
             c.created_by = req.user?.id || null;
             c.created_by_name = importer?.name || null;
         }
 
         // ordered:false keeps inserting past individual failures.
         const inserted = await Contact.insertMany(valid, { ordered: false });
+
+        // Renumber every calendar year the batch touched.
+        const years = new Set(inserted.map(d => yearOfDate(d.contact_date || d.createdAt)));
+        for (const y of years) await renumberYear(y);
 
         res.locals.data = { count: inserted.length, skipped: contacts.length - inserted.length };
         res.locals.message = `${inserted.length} contacts imported successfully`;
@@ -431,6 +519,10 @@ export default class ContactController {
         if (updates.series_code !== undefined) {
             updates.series_code = cleanSeriesCode(updates.series_code);
         }
+        // entry_no / entry_year are system-managed (date-derived); never accept
+        // them from the client — renumberYear owns them.
+        delete updates.entry_no;
+        delete updates.entry_year;
 
         // Trim required string fields
         if (updates.full_name !== undefined) updates.full_name = updates.full_name.trim();
@@ -439,12 +531,22 @@ export default class ContactController {
         if (updates.full_name !== undefined && !updates.full_name) throw new ApiError(400, 'Full name cannot be empty');
         if (updates.village_town !== undefined && !updates.village_town) throw new ApiError(400, 'Village / Town cannot be empty');
 
+        // Capture the entry's year before the edit — a date change can move it to
+        // a different year, and a date/name change re-ranks its year.
+        const before = await Contact.findById(id).select('contact_date createdAt').lean();
+        if (!before) throw new ApiError(404, 'Contact not found');
+
         const updatedContact = await Contact.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
         if (!updatedContact) {
             throw new ApiError(404, 'Contact not found');
         }
 
-        res.locals.data = updatedContact;
+        const oldYear = yearOfDate(before.contact_date || before.createdAt);
+        const newYear = yearOfDate(updatedContact.contact_date || updatedContact.createdAt);
+        await renumberYear(newYear);
+        if (oldYear != null && oldYear !== newYear) await renumberYear(oldYear);
+
+        res.locals.data = withCode(await Contact.findById(id), await getMinYear());
         res.locals.message = 'Contact updated successfully';
         next();
     }
@@ -458,17 +560,52 @@ export default class ContactController {
             throw new ApiError(404, 'Contact not found');
         }
 
+        // Close the gap: re-rank the rest of that year.
+        await renumberYear(yearOfDate(deletedContact.contact_date || deletedContact.createdAt));
+
         res.locals.data = null;
         res.locals.message = 'Contact deleted successfully';
         next();
     }
 
-    // The entry number a new entry would receive, so the form can show it (and
-    // its derived series) before the entry is saved.
-    async getNextEntryNo(req, res, next) {
-        const n = await nextEntryNo();
-        res.locals.data = { entry_no: n };
-        res.locals.message = 'Next entry number';
+    // Preview the code a not-yet-saved entry would get, from its Date (+ Name for
+    // same-day tie-breaks), so the read-only Entry No field can show it live.
+    // Ranks the candidate among its year-mates exactly as renumberYear would.
+    // `id` (when editing) excludes the entry itself so it doesn't count twice.
+    async entryNoPreview(req, res, next) {
+        const { contact_date, full_name, id } = req.body || {};
+        let eff = contact_date ? new Date(contact_date) : new Date();
+        if (Number.isNaN(eff.getTime())) eff = new Date();
+        const year = yearOfDate(eff);
+        const start = new Date(Date.UTC(year, 0, 1));
+        const end = new Date(Date.UTC(year + 1, 0, 1));
+
+        const docs = await Contact.find({
+            $or: [
+                { contact_date: { $gte: start, $lt: end } },
+                { contact_date: null, createdAt: { $gte: start, $lt: end } },
+            ],
+        }).select('_id contact_date createdAt full_name').lean();
+
+        // 'zzz…' sorts a new entry after same date+name ties (real _ids are hex).
+        const candidate = {
+            _id: id || 'zzzzzzzzzzzzzzzzzzzzzzzz',
+            contact_date: contact_date ? eff : null,
+            createdAt: eff,
+            full_name: full_name || '',
+        };
+        const others = id ? docs.filter(d => String(d._id) !== String(id)) : docs;
+        const ranked = [...others, candidate].sort(compareEntries);
+        const seq = ranked.findIndex(d => d === candidate) + 1;
+
+        // Letter for this year. Include the candidate's year in the anchor, so a
+        // back-dated entry that becomes the new earliest year previews as "A".
+        const existingMin = await getMinYear();
+        const minYear = existingMin == null ? year : Math.min(existingMin, year);
+        const letter = yearLetter(year, minYear);
+
+        res.locals.data = { year, letter, seq, code: `${letter}${seq}` };
+        res.locals.message = 'Entry number preview';
         next();
     }
 
@@ -489,32 +626,34 @@ export default class ContactController {
         next();
     }
 
-    // Entries grouped into series of 100 by entry_no
-    // (series = floor((entry_no - 1) / 100) + 1), for the Reports view.
+    // Entries grouped by calendar year (the yearly series), for the Reports view.
     async seriesReport(req, res, next) {
         const { product } = req.body || {};
-        const match = { entry_no: { $ne: null } };
+        const match = { entry_year: { $ne: null } };
         if (product) match.products = String(product);
         const rows = await Contact.aggregate([
             { $match: match },
             {
                 $group: {
-                    _id: { $add: [{ $floor: { $divide: [{ $subtract: ['$entry_no', 1] }, 100] } }, 1] },
+                    _id: '$entry_year',
                     count: { $sum: 1 },
                     active: { $sum: { $cond: [{ $eq: ['$cancelled', true] }, 0, 1] } },
                     cancelled: { $sum: { $cond: [{ $eq: ['$cancelled', true] }, 1, 0] } },
                 },
             },
-            { $sort: { _id: 1 } },
+            { $sort: { _id: -1 } },   // newest year first
         ]);
 
+        const minYear = await getMinYear();
+        // `year` is the numeric grouping key (kept for querying + chart onPick);
+        // `letter` is what the user sees; `series` is a back-compat alias.
         const series = rows.map(r => ({
+            year: r._id,
+            letter: yearLetter(r._id, minYear),
             series: r._id,
             count: r.count,
             active: r.active,
             cancelled: r.cancelled,
-            from: (r._id - 1) * 100 + 1,
-            to: r._id * 100,
         }));
 
         res.locals.data = {
@@ -526,39 +665,43 @@ export default class ContactController {
                 seriesCount: series.length,
             },
         };
-        res.locals.message = 'Series report fetched successfully';
+        res.locals.message = 'Yearly report fetched successfully';
         next();
     }
 
-    // Entries for one series (100-wide entry_no window), newest entry first.
+    // All entries for one calendar year, in date order (1..N).
     async seriesEntries(req, res, next) {
-        const s = parseInt(req.body?.series, 10);
-        if (!Number.isInteger(s) || s < 1) throw new ApiError(400, 'A valid series number is required');
+        const year = parseInt(req.body?.year ?? req.body?.series, 10);
+        if (!Number.isInteger(year)) throw new ApiError(400, 'A valid year is required');
 
-        const from = (s - 1) * 100 + 1;
-        const to = s * 100;
-        const items = await Contact.find({ entry_no: { $gte: from, $lte: to } }).sort({ entry_no: -1 });
+        const items = await Contact.find({ entry_year: year }).sort({ entry_no: 1 });
+        const minYear = await getMinYear();
 
-        res.locals.data = { series: s, from, to, count: items.length, items };
-        res.locals.message = 'Series entries fetched successfully';
+        res.locals.data = { year, letter: yearLetter(year, minYear), series: year, count: items.length, items: withCodes(items, minYear) };
+        res.locals.message = 'Year entries fetched successfully';
         next();
     }
 
-    // Entries in an arbitrary entry_no range [from, to], newest entry first.
+    // Entries with a number in [from, to] within one calendar year (the numbers
+    // reset each year, so a range only makes sense scoped to a year).
     async entriesRange(req, res, next) {
         let from = parseInt(req.body?.from, 10);
         let to = parseInt(req.body?.to, 10);
+        const year = parseInt(req.body?.year, 10);
         if (!Number.isInteger(from) || !Number.isInteger(to)) {
             throw new ApiError(400, 'A valid from and to entry number are required');
+        }
+        if (!Number.isInteger(year)) {
+            throw new ApiError(400, 'A valid year is required');
         }
         if (from > to) { const t = from; from = to; to = t; }   // tolerate reversed input
         if (from < 1) from = 1;
 
-        const query = { entry_no: { $gte: from, $lte: to } };
+        const query = { entry_year: year, entry_no: { $gte: from, $lte: to } };
         if (req.body?.product) query.products = String(req.body.product);
-        const items = await Contact.find(query).sort({ entry_no: -1 });
+        const items = await Contact.find(query).sort({ entry_no: 1 });
 
-        res.locals.data = { from, to, count: items.length, items };
+        res.locals.data = { year, from, to, count: items.length, items: withCodes(items, await getMinYear()) };
         res.locals.message = 'Entries in range fetched successfully';
         next();
     }

@@ -71,7 +71,7 @@ router.post('/contact/cancel', auth, requireRole('admin'), h(contact, 'cancel'),
 router.post('/contact/list', auth, h(contact, 'getAll'), responsedata);
 router.post('/contact/filter-options', auth, h(contact, 'getFilterOptions'), responsedata);
 router.post('/contact/analytics', auth, h(contact, 'getAnalytics'), responsedata);
-router.post('/contact/next-entry-no', auth, h(contact, 'getNextEntryNo'), responsedata);
+router.post('/contact/entry-no-preview', auth, h(contact, 'entryNoPreview'), responsedata);
 router.post('/contact/series-report', auth, h(contact, 'seriesReport'), responsedata);
 router.post('/contact/series-entries', auth, h(contact, 'seriesEntries'), responsedata);
 router.post('/contact/entries-range', auth, h(contact, 'entriesRange'), responsedata);

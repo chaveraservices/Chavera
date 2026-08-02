@@ -4,7 +4,8 @@ import CustomSelect from './CustomSelect';
 import ConfirmEntryModal from './ConfirmEntryModal';
 import api from '../utils/api';
 import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, gradeSymbol, GRADE_LEGEND } from '../utils/contactFields';
-import { seriesOf } from '../utils/series';
+import { entryCode } from '../utils/series';
+import useDebounce from '../utils/useDebounce';
 
 // Local YYYY-MM-DD (native date input format), never UTC-shifted.
 const todayISO = () => {
@@ -163,17 +164,10 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
   // picked, so the section never grows unwieldy.
   const [showQtys, setShowQtys] = useState(false);
 
-  // The entry number this entry has (existing) or will get (new), so the form
-  // can show the running number + its derived series.
-  const [entryNo, setEntryNo] = useState(contact?.entry_no ?? null);
-  useEffect(() => {
-    if (contact?.entry_no != null) { setEntryNo(contact.entry_no); return; }
-    let cancelled = false;
-    api.post('/contact/next-entry-no')
-      .then(res => { if (!cancelled && res.data.success) setEntryNo(res.data.data.entry_no); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [contact]);
+  // The read-only entry code (e.g. "2026-1"). It is DATE-DERIVED — the entry's
+  // rank within its year — so it previews live as the Date (and Name, for
+  // same-day ties) change, and is finalised on save.
+  const [previewCode, setPreviewCode] = useState(entryCode(contact));
 
   const submitNewProduct = async () => {
     setAddingProduct(true);
@@ -244,6 +238,26 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
       .catch(() => {})
       .finally(() => setLocLoading(false));
   }, []);
+
+  // Live preview of the date-derived entry code. Debounced on the Date + Name
+  // (Name only matters as a same-day tie-break), and excludes this entry itself
+  // when editing so it doesn't count against its own rank.
+  const previewKey = useDebounce(
+    `${formData.contact_date || ''}|${(formData.full_name || '').trim().toLowerCase()}`,
+    400
+  );
+  useEffect(() => {
+    let cancelled = false;
+    api.post('/contact/entry-no-preview', {
+      contact_date: formData.contact_date || undefined,
+      full_name: formData.full_name || '',
+      id: contact?._id,
+    })
+      .then(res => { if (!cancelled && res.data.success) setPreviewCode(res.data.data.code); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewKey, contact]);
 
   // Cascading lists (districts are plain name strings now)
   const availableDistricts = locations.find(l => l.state === formData.state)?.districts || [];
@@ -523,37 +537,19 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
           </div>
         )}
 
-        {/* ENTRY — running number + its series, plus an optional series code. */}
+        {/* ENTRY — the auto code: a letter for the year (A, B, C…) + the entry's
+            rank within that year, by date. e.g. "A-1". */}
         <div className="form-section">
           <div className="form-section-title">ENTRY</div>
-          <div className="form-grid form-grid-3">
-            <div className="form-group">
-              <label>Series Code <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-              <input
-                name="series_code"
-                value={formData.series_code}
-                onChange={(e) => setFormData(prev => ({ ...prev, series_code: e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) }))}
-                className="input-field"
-                placeholder="e.g. A, AA, AB"
-                maxLength={3}
-                autoComplete="off"
-                style={{ textTransform: 'uppercase' }}
-              />
-              <FieldHint>Up to 3 letters.</FieldHint>
-            </div>
-
+          <div className="form-grid">
             <div className="form-group">
               <label>Entry No</label>
-              <div className="input-field is-readonly">{entryNo != null ? `#${entryNo}` : '—'}</div>
-              <FieldHint>{contact ? 'This entry’s number.' : 'Assigned automatically on save.'}</FieldHint>
-            </div>
-
-            <div className="form-group">
-              <label>Series</label>
-              <div className="input-field is-readonly">
-                {seriesOf(entryNo) != null ? `Series ${seriesOf(entryNo)}` : '—'}
-              </div>
-              <FieldHint>Auto: every 100 entries = one series.</FieldHint>
+              <div className="input-field is-readonly">{previewCode || '—'}</div>
+              <FieldHint>
+                {contact
+                  ? 'Auto: year letter + the entry’s position in that year, by date.'
+                  : 'Auto by date — year letter + rank; resets each year. Confirmed on save.'}
+              </FieldHint>
             </div>
           </div>
         </div>
