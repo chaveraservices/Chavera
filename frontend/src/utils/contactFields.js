@@ -106,6 +106,8 @@ function composeAddress(c) {
 export function contactsToExportRows(contacts) {
   return contacts.map((c, i) => ({
     'S.No': i + 1,
+    // Yearly entry code (letter for the year + rank), e.g. "A-1".
+    'Entry No': c.entry_code || '',
     'Date': formatDate(c),
     'Name': c.full_name || '',
     'Age': c.age || '',
