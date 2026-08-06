@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { X, Pencil, Tags, Trash2, MapPin, Building2, Ban, RotateCcw } from 'lucide-react';
 import { printLabels } from '../utils/printLabels';
 import { gradeWithSymbol } from '../utils/contactFields';
-import { seriesOf } from '../utils/series';
+import { entryCode } from '../utils/series';
 import useBodyScrollLock from '../utils/useBodyScrollLock';
 
 // "Cot ×3, Sofa set" — append a quantity only when it's more than one.
@@ -59,7 +59,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
   // from the person's name — then surface the business label in the header.
   const businessName = (c.business_name || '').trim();
   const isBusiness = businessName && businessName.toLowerCase() !== (c.full_name || '').trim().toLowerCase();
-  const series = seriesOf(c.entry_no);
+  const code = entryCode(c);   // e.g. "2026-1"
 
   const handleLabel = () => {
     const err = printLabels([c]);
@@ -68,7 +68,7 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex }}>
-      <div className="entry-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Entry ${c.entry_no ?? ''} ${name}`}>
+      <div className="entry-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Entry ${code ?? ''} ${name}`}>
         {/* Header carries identity: entry number, name, category */}
         <div className="entry-modal-head">
           <div className="entry-avatar">{(c.full_name || '?').charAt(0).toUpperCase()}</div>
@@ -81,9 +81,8 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
               </div>
             )}
             <div className="entry-modal-sub">
-              {c.entry_no != null && <span className="entry-chip">#{c.entry_no}</span>}
+              {code && <span className="entry-chip">{code}</span>}
               {c.series_code && <span className="entry-chip">Code {c.series_code}</span>}
-              {series != null && <span className="entry-chip">Series {series}</span>}
               {c.cancelled && <span className="badge is-cancelled">Cancelled</span>}
               {isBusiness && <span className="badge dealer">Business</span>}
               {c.category && <span className={`badge ${String(c.category).toLowerCase() === 'dealer' ? 'dealer' : 'customer'}`}>{c.category}</span>}
@@ -103,9 +102,8 @@ export default function EntryDetailModal({ contact, onClose, onEdit, onDelete, o
         </div>
 
         <div className="entry-modal-body">
-          <Row label="Entry No" value={c.entry_no != null ? `#${c.entry_no}` : null} />
+          <Row label="Entry No" value={code} />
           <Row label="Series Code" value={c.series_code} />
-          <Row label="Series" value={series != null ? `Series ${series}` : null} />
           <Row label="Date" value={fmtDate(c.contact_date || c.createdAt)} />
           <Row label="Entered by" value={c.created_by_name} />
           {c.cancelled && <Row label="Cancelled on" value={fmtDate(c.cancelled_at)} />}

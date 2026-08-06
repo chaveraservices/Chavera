@@ -11,6 +11,7 @@ import EntryDetailModal from '../components/EntryDetailModal';
 import EntryFormModal from '../components/EntryFormModal';
 import { useAuth } from '../context/AuthContext';
 import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, CATEGORY_OPTIONS } from '../utils/contactFields';
+import { entryCode } from '../utils/series';
 import useProducts from '../utils/useProducts';
 
 // "Cot ×3, Sofa set" — quantity shown only when it's more than one.
@@ -66,6 +67,7 @@ export default function ContactsPage() {
   const [houseTypes, setHouseTypes] = useState([]);
   const [purchaseTypes, setPurchaseTypes] = useState([]);
   const [products, setProducts] = useState([]);
+  const [years, setYears] = useState([]);          // [{ year, letter }] for the year filter
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +80,7 @@ export default function ContactsPage() {
   const [selectedHouseType, setSelectedHouseType] = useState('');
   const [selectedPurchaseType, setSelectedPurchaseType] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');  // entry-series year (A, B, …)
   const [yearsAgo, setYearsAgo] = useState('');  // "bought N years ago" bucket
   const [showMoreFilters, setShowMoreFilters] = useState(false);
 
@@ -98,9 +101,10 @@ export default function ContactsPage() {
     house_type: selectedHouseType,
     purchase_type: selectedPurchaseType,
     product: selectedProduct,
+    year: selectedYear,
     years_ago: yearsAgo,
   }), [debouncedSearch, selectedState, selectedDistrict, selectedCity, selectedCategory,
-    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, yearsAgo]);
+    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, selectedYear, yearsAgo]);
 
   // Load distinct filter options once (and after mutations).
   useEffect(() => {
@@ -114,6 +118,7 @@ export default function ContactsPage() {
           setHouseTypes(d.houseTypes || []);
           setPurchaseTypes(d.purchaseTypes || []);
           setProducts(d.products || []);
+          setYears(d.years || []);
         }
       })
       .catch(err => console.error(err));
@@ -277,6 +282,7 @@ export default function ContactsPage() {
     setSelectedHouseType('');
     setSelectedPurchaseType('');
     setSelectedProduct('');
+    setSelectedYear('');
     setYearsAgo('');
     // Drop any drill-down params left in the URL by the Dashboard, so the
     // address bar matches the (now empty) filter state.
@@ -285,16 +291,16 @@ export default function ContactsPage() {
 
   const hasActiveFilters = searchQuery || selectedState || selectedDistrict || selectedCity ||
     selectedCategory || selectedGrade || selectedHouseType ||
-    selectedPurchaseType || selectedProduct || yearsAgo;
+    selectedPurchaseType || selectedProduct || selectedYear || yearsAgo;
 
   const activeFilterCount = [selectedState, selectedDistrict, selectedCity, selectedCategory,
-    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, yearsAgo]
+    selectedGrade, selectedHouseType, selectedPurchaseType, selectedProduct, selectedYear, yearsAgo]
     .filter(Boolean).length + (searchQuery ? 1 : 0);
 
   // Fixed five-column registry. The client asked for a compact table — every
   // other field lives in the detail modal, opened by clicking a row.
   const columnDefs = {
-    id: { label: '#', render: c => <span className="cell-id">{c.entry_no != null ? c.entry_no : '—'}</span> },
+    id: { label: '#', render: c => <span className="cell-id">{entryCode(c) || '—'}</span> },
     name: {
       label: 'NAME',
       render: c => (
@@ -389,6 +395,13 @@ export default function ContactsPage() {
       <div className="filter-host">
         {showMoreFilters && (
           <div className="filter-panel" ref={filterPanelRef}>
+            <div className="filter-field">
+              <label>Year (Series)</label>
+              <CustomSelect value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
+                options={[{ label: 'All Years', value: '' },
+                  ...years.map(y => ({ label: `${y.letter} · ${y.year}`, value: String(y.year) }))]}
+                placeholder="All Years" />
+            </div>
             <div className="filter-field">
               <label>State</label>
               <CustomSelect value={selectedState}
@@ -494,7 +507,7 @@ export default function ContactsPage() {
                     onClick={() => setDetailContact(contact)}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Open entry ${contact.entry_no ?? ''} ${contact.full_name}`}
+                    aria-label={`Open entry ${entryCode(contact) ?? ''} ${contact.full_name}`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailContact(contact); }
                     }}

@@ -4,6 +4,8 @@ import CustomSelect from './CustomSelect';
 import ConfirmEntryModal from './ConfirmEntryModal';
 import api from '../utils/api';
 import { CUSTOMER_GRADES, HOUSE_TYPES, PURCHASE_TYPES, gradeSymbol, GRADE_LEGEND } from '../utils/contactFields';
+import { entryCode } from '../utils/series';
+import useDebounce from '../utils/useDebounce';
 
 // Local YYYY-MM-DD (native date input format), never UTC-shifted.
 const todayISO = () => {
@@ -96,19 +98,7 @@ function DateField({ value, onChange }) {
 // Remembers the last date used, so a batch of entries for one day only needs the
 // date set once. Cleared implicitly by defaulting to today on the first entry.
 const LAST_DATE_KEY = 'chavera_last_entry_date';
-// Like the date: the last series code and entry number used carry forward, so a
-// new entry follows straight on from the previous one.
-const LAST_SERIES_CODE_KEY = 'chavera_last_series_code';
-const LAST_ENTRY_NO_KEY = 'chavera_last_entry_no';
-// A new entry's number = the previous entry's number + 1 (remembered across
-// entries). Returns null when nothing has been saved yet, so the caller can fall
-// back to the server's next number.
-const rememberedNextEntryNo = () => {
-  const last = parseInt(localStorage.getItem(LAST_ENTRY_NO_KEY), 10);
-  return Number.isInteger(last) && last > 0 ? last + 1 : null;
-};
 import useProducts from '../utils/useProducts';
-import useDebounce from '../utils/useDebounce';
 import { useAuth } from '../context/AuthContext';
 
 // ---------- validation rules ----------
@@ -174,51 +164,10 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
   // picked, so the section never grows unwieldy.
   const [showQtys, setShowQtys] = useState(false);
 
-  // The entry number this entry has (existing) or will get (new). A new entry
-  // follows the previous one (remembered number + 1); editing keeps its own.
-  const [entryNo, setEntryNo] = useState(contact?.entry_no ?? rememberedNextEntryNo());
-  // True once the user hand-edits the entry number, so the auto next-number
-  // fetch never overwrites a deliberate manual value.
-  const entryNoTouchedRef = useRef(false);
-  useEffect(() => {
-    if (contact?.entry_no != null) { setEntryNo(contact.entry_no); return; }
-    // Already following the previous entry (remembered number + 1) — no fetch.
-    if (rememberedNextEntryNo() != null) return;
-    // Nothing remembered yet: fall back to the server's next number (max + 1).
-    let cancelled = false;
-    api.post('/contact/next-entry-no')
-      .then(res => { if (!cancelled && !entryNoTouchedRef.current && res.data.success) setEntryNo(res.data.data.entry_no); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [contact]);
-
-  // Warn (before submit) when the hand-edited entry number is already used by
-  // another entry. The server enforces this too; this is just early feedback.
-  const [entryNoTaken, setEntryNoTaken] = useState(false);
-  const debouncedEntryNo = useDebounce(entryNo, 350);
-  useEffect(() => {
-    // Skip a blank/invalid number, or one that equals this entry's own saved
-    // number (editing without changing it isn't a conflict).
-    if (!Number.isInteger(debouncedEntryNo) || debouncedEntryNo <= 0 ||
-        (contact?.entry_no != null && debouncedEntryNo === contact.entry_no)) {
-      setEntryNoTaken(false);
-      return;
-    }
-    let cancelled = false;
-    api.post('/contact/check-entry-no', { entry_no: debouncedEntryNo, id: contact?._id })
-      .then(res => { if (!cancelled && res.data.success) setEntryNoTaken(!!res.data.data.taken); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [debouncedEntryNo, contact]);
-
-  // Start the keyboard flow on Series Code for a new entry (Series Code →
-  // Entry No → Honorific → …), instead of auto-opening the honorific dropdown.
-  const seriesCodeRef = useRef(null);
-  useEffect(() => {
-    if (contact) return;
-    const t = setTimeout(() => seriesCodeRef.current?.focus(), 0);
-    return () => clearTimeout(t);
-  }, [contact]);
+  // The read-only entry code (e.g. "2026-1"). It is DATE-DERIVED — the entry's
+  // rank within its year — so it previews live as the Date (and Name, for
+  // same-day ties) change, and is finalised on save.
+  const [previewCode, setPreviewCode] = useState(entryCode(contact));
 
   const submitNewProduct = async () => {
     setAddingProduct(true);
@@ -234,11 +183,7 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
     setShowAddProduct(false);
   };
   const [formData, setFormData] = useState({
-    // Like the date: a new entry carries the last series code used; editing keeps
-    // the entry's own code.
-    series_code: contact
-      ? (contact.series_code || '')
-      : (localStorage.getItem(LAST_SERIES_CODE_KEY) || ''),
+    series_code: contact?.series_code || '',
     honorific: contact?.honorific || '',
     full_name: contact?.full_name || '',
     business_name: contact?.business_name || '',
@@ -293,6 +238,26 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
       .catch(() => {})
       .finally(() => setLocLoading(false));
   }, []);
+
+  // Live preview of the date-derived entry code. Debounced on the Date + Name
+  // (Name only matters as a same-day tie-break), and excludes this entry itself
+  // when editing so it doesn't count against its own rank.
+  const previewKey = useDebounce(
+    `${formData.contact_date || ''}|${(formData.full_name || '').trim().toLowerCase()}`,
+    400
+  );
+  useEffect(() => {
+    let cancelled = false;
+    api.post('/contact/entry-no-preview', {
+      contact_date: formData.contact_date || undefined,
+      full_name: formData.full_name || '',
+      id: contact?._id,
+    })
+      .then(res => { if (!cancelled && res.data.success) setPreviewCode(res.data.data.code); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewKey, contact]);
 
   // Cascading lists (districts are plain name strings now)
   const availableDistricts = locations.find(l => l.state === formData.state)?.districts || [];
@@ -479,12 +444,6 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
       return;
     }
 
-    // Don't even reach the confirm step with a known-duplicate entry number.
-    if (entryNoTaken) {
-      setServerError(`Entry #${entryNo} is already used by another entry. Choose a different number.`);
-      return;
-    }
-
     setConfirming(true);
   };
 
@@ -510,30 +469,15 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
       phone_2: phones[0] || '',
       product_quantities,
     };
-    // Include the (possibly hand-edited) entry number. Only when it's a real
-    // number — a blank/failed fetch must not overwrite an existing entry's
-    // number on update, and lets a new entry fall back to auto-assignment.
-    if (Number.isInteger(entryNo) && entryNo > 0) payload.entry_no = entryNo;
 
     try {
-      let saved;
       if (contact && contact._id) {
-        const res = await api.post('/contact/update', { id: contact._id, ...payload });
-        saved = res.data?.data;
+        await api.post('/contact/update', { id: contact._id, ...payload });
       } else {
-        const res = await api.post('/contact/insert', payload);
-        saved = res.data?.data;
+        await api.post('/contact/insert', payload);
       }
       // Remember the date so the next new entry defaults to it (#2).
       if (payload.contact_date) localStorage.setItem(LAST_DATE_KEY, payload.contact_date);
-      // Carry the series code + entry number forward, but only from a newly
-      // created entry — editing an old record shouldn't reset the running
-      // sequence. The next new entry then follows on (entry number + 1).
-      if (!(contact && contact._id)) {
-        localStorage.setItem(LAST_SERIES_CODE_KEY, payload.series_code || '');
-        const savedNo = saved?.entry_no ?? (Number.isInteger(entryNo) ? entryNo : null);
-        if (savedNo != null) localStorage.setItem(LAST_ENTRY_NO_KEY, String(savedNo));
-      }
       onSave();
     } catch (err) {
       // Drop back to the form so the error is visible next to the fields.
@@ -593,50 +537,19 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
           </div>
         )}
 
-        {/* ENTRY — an optional series code and the running entry number. Both
-            carry forward from the previous entry (like the date). */}
+        {/* ENTRY — the auto code: a letter for the year (A, B, C…) + the entry's
+            rank within that year, by date. e.g. "A-1". */}
         <div className="form-section">
           <div className="form-section-title">ENTRY</div>
           <div className="form-grid">
             <div className="form-group">
-              <label>Series Code <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-              <input
-                ref={seriesCodeRef}
-                name="series_code"
-                value={formData.series_code}
-                onChange={(e) => setFormData(prev => ({ ...prev, series_code: e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) }))}
-                className="input-field"
-                placeholder="e.g. A, AA, AB"
-                maxLength={3}
-                autoComplete="off"
-                style={{ textTransform: 'uppercase' }}
-              />
-              <FieldHint>Up to 3 letters.</FieldHint>
-            </div>
-
-            <div className="form-group">
               <label>Entry No</label>
-              <input
-                name="entry_no"
-                value={entryNo ?? ''}
-                onChange={(e) => {
-                  entryNoTouchedRef.current = true;
-                  const digits = e.target.value.replace(/\D/g, '').slice(0, 9);
-                  setEntryNo(digits === '' ? null : parseInt(digits, 10));
-                }}
-                className={`input-field ${entryNoTaken ? 'input-error-field' : ''}`}
-                inputMode="numeric"
-                placeholder="—"
-                autoComplete="off"
-                style={entryNoTaken ? { borderColor: 'var(--danger)', boxShadow: '0 0 0 2px rgba(220,38,38,0.15)' } : undefined}
-              />
-              {entryNoTaken ? (
-                <span style={{ color: 'var(--danger)', fontSize: '0.78rem', marginTop: 4, display: 'block' }}>
-                  ⚠ Entry #{entryNo} is already used by another entry.
-                </span>
-              ) : (
-                <FieldHint>{contact ? 'Editable — this entry’s number.' : 'Follows the previous entry — edit to override.'}</FieldHint>
-              )}
+              <div className="input-field is-readonly">{previewCode || '—'}</div>
+              <FieldHint>
+                {contact
+                  ? 'Auto: year letter + the entry’s position in that year, by date.'
+                  : 'Auto by date — year letter + rank; resets each year. Confirmed on save.'}
+              </FieldHint>
             </div>
           </div>
         </div>
@@ -660,6 +573,7 @@ export default function ContactForm({ contact, onCancel, onSave, onClose, onCanc
                   { label: 'Prof.', value: 'Prof.' },
                 ]}
                 placeholder="Select"
+                autoOpen={!contact}
               />
             </div>
 
